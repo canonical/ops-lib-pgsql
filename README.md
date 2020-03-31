@@ -31,13 +31,19 @@ class MyCharm(ops.charm.CharmBase):
         self.framework.observe(self.db.on.standby_changed, self.on_standby_changed)
 
     def on_database_joined(self, event: pgsql.DatabaseJoinedEvent):
-        # Provide requirements to the PostgreSQL server.
-        event.database = 'mydbname'  # Request database named mydbname
-        event.extensions = ['citext']  # Request the citext extension installed
+        if self.model.unit.is_leader():
+            # Provide requirements to the PostgreSQL server.
+            event.database = 'mydbname'  # Request database named mydbname
+            event.extensions = ['citext']  # Request the citext extension installed
+        elif event.database != 'mydbname':
+            # Leader has not yet set requirements. Defer, incase this unit
+            # becomes leader and needs to perform that operation.
+            event.defer()
+            return
 
     def on_master_changed(self, event: pgsql.MasterChangedEvent):
         # Enforce a single 'db' relation, or else we risk directing writes to
-        # an unknown backend. This can happen via user error, or redeploying
+        # an the wrong backend. This can happen via user error, or redeploying
         # the PostgreSQL backend.
         if len(self.model.relations['db']) > 0:
             self.unit.status = ops.model.BlockedStatus("Too many db relations!")
@@ -45,12 +51,18 @@ class MyCharm(ops.charm.CharmBase):
             return
         if event.relation.id not in (r.id for r in self.model.relations['db']):
             return  # Deferred event for relation that no longer exists.
+
+        if event.database != 'mydbname':
+            # Leader has not yet set requirements. Defer, or risk connecting to
+            # an incorrect database.
+            event.defer()
+            return
         
-        # The connection to the primary database have been created, changed or removed.
-        # More specific events are available, but most charms will find it easier
-        # to just handle the Changed events.
-        # event.master is None if the master database is not available, or
-        # a pgsql.ConnectionString instance.
+        # The connection to the primary database has been created,
+        # changed or removed. More specific events are available, but
+        # most charms will find it easier to just handle the Changed
+        # events. event.master is None if the master database is not
+        # available, or a pgsql.ConnectionString instance.
         self.state.db_conn_str = None if event.master is None else event.master.conn_str
         self.state.db_uri = None if event.master is None else event.master.uri
 
@@ -59,12 +71,18 @@ class MyCharm(ops.charm.CharmBase):
         # are available.
 
     def on_standby_changed(self, event: pgsql.StandbyChangedEvent):
-        if len(self.model.relations['db']) > 0:
+         if len(self.model.relations['db']) > 0:
             self.unit.status = ops.model.BlockedStatus("Too many db relations!")
             event.defer()
             return
         if event.relation.id not in (r.id for r in self.model.relations['db']):
             return  # Deferred event for relation that no longer exists.
+
+        if event.database != 'mydbname':
+            # Leader has not yet set requirements. Defer, or risk connecting to
+            # an incorrect database.
+            event.defer()
+            return
 
         # Charms needing access to the hot standby databases can get
         # their connection details here. Applications can scale out
