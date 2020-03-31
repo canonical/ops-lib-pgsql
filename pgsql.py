@@ -1,3 +1,4 @@
+import functools
 import ipaddress
 import logging
 import re
@@ -9,6 +10,7 @@ import ops.framework
 import ops.model
 
 
+@functools.total_ordering
 class ConnectionString:
     """A libpq connection string.
 
@@ -46,7 +48,6 @@ class ConnectionString:
     user: str = None
     password: str = None
     uri: str = None
-
 
     def __init__(self, conn_str=None, **kw):  # noqa
         # Parse libpq key=value style connection string. Components
@@ -140,6 +141,16 @@ class ConnectionString:
     def __repr__(self) -> str:
         return 'ConnectionString({!r})'.format(self.conn_str)
 
+    def __eq__(self, other) -> bool:
+        if not hasattr(other, 'conn_str'):
+            return NotImplemented
+        return self.conn_str == other.conn_str
+
+    def __lt__(self, other) -> bool:
+        if not hasattr(other, 'conn_str'):
+            return NotImplemented
+        return self.conn_str < other.conn_str
+
 
 class PostgreSQLRelationEvent(ops.charm.RelationEvent):
     def __init__(
@@ -156,12 +167,12 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
     @property
     def master(self) -> ConnectionString:
         '''The master database. None if there is currently no master.'''
-        return ConnectionString(_master(self.relation, self._local_unit))
+        return ConnectionString(_master(self.log, self.relation, self._local_unit))
 
     @property
     def standbys(self) -> List[ConnectionString]:
         '''All hot standby databases (read only replicas).'''
-        return [ConnectionString(s) for s in _standbys(self.relation, self._local_unit)]
+        return [ConnectionString(s) for s in _standbys(self.log, self.relation, self._local_unit)]
 
     @property
     def database(self) -> str:
@@ -184,6 +195,7 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         self.relation.data[self._local_unit.app]['database'] = dbname
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]['database'] = dbname
+        self.log.debug('database set to %s on relation %s', dbname, self.relation.id)
 
     @property
     def roles(self) -> List[str]:
@@ -211,6 +223,7 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         self.relation.data[self._local_unit.app]['roles'] = sroles
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]['roles'] = sroles
+        self.log.debug('roles set to %s on relation %s', sroles, self.relation.id)
 
     @property
     def extensions(self) -> List[str]:
@@ -232,6 +245,7 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         self.relation.data[self._local_unit.app]['extensions'] = sext
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]['extensions'] = sext  # Deprecated, should be app reldata
+        self.log.debug('extensions set to %s on relation %s', sext, self.relation.id)
 
     def snapshot(self):
         s = [
@@ -244,6 +258,10 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         sup, mine = snapshot
         super().restore(sup)
         self._local_unit = self.framework.model.get_unit(mine['local_unit_name'])
+
+    @property
+    def log(self):
+        return logging.getLogger('pgsql.client.{}.event'.format(self.relation.name))
 
 
 class DatabaseJoinedEvent(PostgreSQLRelationEvent):
@@ -344,12 +362,13 @@ class PostgreSQLClient(ops.framework.Object):
         )
 
     def _on_joined(self, event: ops.charm.RelationEvent) -> None:
+        self.log.debug('_on_joined for relation %s', event.relation.id)
+        self.log.info('emitting database_joined event for relation %s', event.relation.id)
         self.on.database_joined.emit(**self._db_event_args(event))
-        self._state.rels[event.relation.id] = dict(
-            master=_master(event.relation, self.model.unit), standbys=_standbys(event.relation, self.model.unit),
-        )
+        self._state.rels[event.relation.id] = dict(master=None, standbys=None)
 
     def _on_changed(self, event: ops.charm.RelationEvent) -> None:
+        self.log.debug('_on_changed for relation %s', event.relation.id)
         # Backwards compatibility until PostgreSQL charm updated to use application relation data.
         self._mirror_appdata(event)
         kwargs = self._db_event_args(event)
@@ -359,57 +378,70 @@ class PostgreSQLClient(ops.framework.Object):
 
         prev_master = self._state.rels[relid]['master']
         prev_standbys = self._state.rels[relid]['standbys']
-        new_master = _master(rel, self.model.unit)
-        new_standbys = _standbys(rel, self.model.unit)
+        new_master = _master(self.log, rel, self.model.unit)
+        new_standbys = _standbys(self.log, rel, self.model.unit)
 
         database_available = False
         database_changed = False
         database_gone = False
 
         if prev_master is None and new_master is not None:
+            self.log.info('emitting master_available event for relation %s', event.relation.id)
             self.on.master_available.emit(**kwargs)
             database_available = True
 
-        if prev_master is not None and new_master is not None:
+        if str(prev_master) != str(new_master):
+            self.log.info('emitting master_changed event for relation %s', event.relation.id)
             self.on.master_changed.emit(**kwargs)
             database_changed = True
 
         if prev_master is not None and new_master is None:
+            self.log.info('emitting master_gone event for relation %s', event.relation.id)
             self.on.master_gone.emit(**kwargs)
             database_gone = True
 
         if prev_standbys == [] and new_standbys != []:
+            self.log.info('emitting standby_available event for relation %s', event.relation.id)
             self.on.standby_available.emit(**kwargs)
             database_available = True
 
-        if prev_standbys != [] and new_standbys != prev_standbys:
+        if prev_standbys != new_standbys:
+            self.log.info('emitting standby_changed event for relation %s', event.relation.id)
             self.on.standby_changed.emit(**kwargs)
             database_changed = True
 
         if prev_standbys != [] and new_standbys == []:
+            self.log.info('emitting standby_gone event for relation %s', event.relation.id)
             self.on.standby_gone.emit(**kwargs)
             database_gone = True
 
         if database_available:
+            self.log.info('emitting database_available event for relation %s', event.relation.id)
             self.on.database_available.emit(**kwargs)
 
         if database_changed:
+            self.log.info('emitting database_changed event for relation %s', event.relation.id)
             self.on.database_changed.emit(**kwargs)
 
-        if database_gone:
+        if (prev_master is not None or prev_standbys != []) and database_gone:
+            self.log.info('emitting database_gone event for relation %s', event.relation.id)
             self.on.database_gone.emit(**kwargs)
 
         self._state.rels[relid]['master'] = new_master
         self._state.rels[relid]['standbys'] = new_standbys
 
     def _on_broken(self, event: ops.charm.RelationEvent) -> None:
+        self.log.debug('_on_broken for relation %s', event.relation.id)
+        self.log.info('cleaning up broken relation %s', event.relation.id)
         del self._state.rels[event.relation.id]
 
     def _on_upgrade_charm(self, event: ops.charm.UpgradeCharmEvent) -> None:
+        self.log.debug('_on_upgrade_charm for relation %s', self.relation_name)
         # Migrate leader's unit relation data to application relation data if necessary.
         # This is for upgrading from pre-operator-framework charms.
         if self.model.unit.is_leader():
             for rel in self.framework.model.relations[self.relation_name]:
+                self.log.info('leader migrating legacy relation data to app relation data for relation %s', rel.id)
                 ldata = rel.data[self.model.unit]
                 adata = rel.data[self.model.unit.app]
                 for k in ['database', 'roles', 'extensions']:
@@ -424,40 +456,71 @@ class PostgreSQLClient(ops.framework.Object):
         is updated to read application relation data, we mirror the application data to the
         unit relation data for backwards compatibility.
         '''
+        self.log.debug('mirroring app relation data for relation %s', event.relation.id)
         ldata = event.relation.data[self.model.unit]
         adata = event.relation.data[self.model.unit.app]
         for key in ['database', 'roles', 'extensions']:
-            if key in adata and adata[key] != ldata.get(key):
-                ldata[key] = adata[key]
+            ldata[key] = adata.get(key, '')
 
 
-def _master(relation: ops.model.Relation, local_unit: str) -> str:
+def _master(log: logging.Logger, relation: ops.model.Relation, local_unit: ops.model.Unit) -> str:
     '''The master database. None if there is currently no master.'''
+    appdata = relation.data[local_unit.app]
     locdata = relation.data[local_unit]
     for _, reldata in sorted((str(k), v) for k, v in relation.data.items()):
         conn_str = reldata.get('master')
-        if conn_str and _is_authorized(locdata, reldata):
-            return conn_str
+        if conn_str:
+            if _is_ready(log, appdata, locdata, reldata):
+                log.debug('ready master found on relation %s', relation.id)
+                return conn_str
+            log.debug('unready master found on relation %s', relation.id)
+    log.debug('no ready master found on relation %s', relation.id)
     return None
 
 
-def _standbys(relation: ops.model.Relation, local_unit: str) -> List[str]:
+def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops.model.Unit) -> List[str]:
     '''All hot standby databases (read only replicas).'''
+    appdata = relation.data[local_unit.app]
     locdata = relation.data[local_unit]
     for _, reldata in sorted((str(k), v) for k, v in relation.data.items()):
         raw = reldata.get('standbys')
-        if raw and _is_authorized(locdata, reldata):
-            return (conn_str for conn_str in raw.splitlines() if conn_str)
+        if raw:
+            if _is_ready(log, appdata, locdata, reldata):
+                log.debug('ready standbys found on relation %s', relation.id)
+                return (conn_str for conn_str in raw.splitlines() if conn_str)
+            log.debug('unready standbys found on relation %s', relation.id)
+    log.debug('no ready standbys found on relation %s', relation.id)
     return []
 
 
-def _is_authorized(locdata: ops.model.RelationData, reldata: ops.model.RelationData) -> bool:
-    # To ensure clients do not attempt to connect to the database until the PostgreSQL server
-    # has authorized them, the PostgreSQL charm publishes the egress-subnets that it has granted
-    # access to the relation.
+def _is_ready(
+    log: logging.Logger,
+    appdata: ops.model.RelationData,
+    locdata: ops.model.RelationData,
+    reldata: ops.model.RelationData,
+) -> bool:
+    # The relation is not ready for use if the server has not yet
+    # mirrored relation config set by the client. This is how we
+    # know that the server has acted on requests like setting the
+    # database name.
+    for k in ['database', 'roles', 'extensions']:
+        got, want = reldata.get(k), appdata.get(k)
+        if got != want:
+            log.debug('not ready because got %s==%r, requested %r', k, got, want)
+            return False
+
+    # To ensure clients do not attempt to connect to the database
+    # until the PostgreSQL server has authorized them, the PostgreSQL
+    # charm publishes to the relation the egress-subnets that it has
+    # granted access.
     allowed_subnets = set(_csplit(reldata.get('allowed-subnets')))
     my_egress = set(_csplit(locdata.get('egress-subnets')))
-    return my_egress <= allowed_subnets
+    if my_egress <= allowed_subnets:
+        log.debug('relation is ready')
+        return True
+    else:
+        log.debug('egress not granted access (%s > %s)', my_egress, allowed_subnets)
+        return False
 
 
 def _csplit(s) -> Iterable[str]:
