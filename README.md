@@ -10,7 +10,7 @@ install it into your git branch:
 ```
 git submodule add git+ssh://git.launchpad.net/~stub/interface-pgsql/+git/operator mod/interface-pgsql
 mkdir lib/interface
-ln -s ../../mod/interface-pgsql/pgsql.py lib/interface/
+ln -s ../../mod/interface-pgsql/pgsql lib/interface/
 ```
 
 Your charm needs to bootstrap it and handle events:

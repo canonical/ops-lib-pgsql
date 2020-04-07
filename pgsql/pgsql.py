@@ -20,7 +20,23 @@ import ops.framework
 import ops.model
 import yaml
 
-from connstr import ConnectionString
+from .connstr import ConnectionString
+
+
+__all__ = [
+    'DatabaseAvailableEvent',
+    'DatabaseChangedEvent',
+    'DatabaseGoneEvent',
+    'DatabaseJoinedEvent',
+    'MasterAvailableEvent',
+    'MasterChangedEvent',
+    'MasterGoneEvent',
+    'PostgreSQLClient',
+    'PostgreSQLRelationEvent',
+    'StandbyAvailableEvent',
+    'StandbyChangedEvent',
+    'StandbyGoneEvent',
+]
 
 
 # Leadership settings key prefix used by PostgreSQLClient
@@ -229,9 +245,9 @@ class PostgreSQLClientEvents(ops.framework.EventSetBase):
     database_available = ops.framework.EventSource(DatabaseAvailableEvent)
     master_available = ops.framework.EventSource(MasterAvailableEvent)
     standby_available = ops.framework.EventSource(StandbyAvailableEvent)
-    database_changed = ops.framework.EventSource(DatabaseAvailableEvent)
-    master_changed = ops.framework.EventSource(MasterAvailableEvent)
-    standby_changed = ops.framework.EventSource(StandbyAvailableEvent)
+    database_changed = ops.framework.EventSource(DatabaseChangedEvent)
+    master_changed = ops.framework.EventSource(MasterChangedEvent)
+    standby_changed = ops.framework.EventSource(StandbyChangedEvent)
     database_gone = ops.framework.EventSource(DatabaseGoneEvent)
     master_gone = ops.framework.EventSource(MasterGoneEvent)
     standby_gone = ops.framework.EventSource(StandbyGoneEvent)
