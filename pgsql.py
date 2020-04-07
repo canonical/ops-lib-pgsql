@@ -1,168 +1,17 @@
-import functools
-import ipaddress
 import logging
-import re
 import subprocess
-from typing import Dict, Iterable, List, Mapping, Tuple
-import urllib
+from typing import Dict, Iterable, List, Mapping
 
 import ops.charm
 import ops.framework
 import ops.model
 import yaml
 
+from connstr import ConnectionString
+
 
 # Leadership settings key prefix used by PostgreSQLClient
 LEADER_KEY = 'interface.pgsql'
-
-
-@functools.total_ordering
-class ConnectionString:
-    r"""A libpq connection string.
-
-    >>> c = ConnectionString(host='1.2.3.4', dbname='mydb', port=5432, user='anon',
-    ...                      password="sec'ret", application_name='myapp')
-    ...
-    >>> print(str(c))
-    application_name=myapp dbname=mydb host=1.2.3.4 password=sec\'ret port=5432 user=anon
-    >>> print(str(ConnectionString(str(c), dbname='otherdb')))
-    application_name=myapp dbname=otherdb host=1.2.3.4 password=sec\'ret port=5432 user=anon
-
-    Components may be accessed as attributes.
-
-    >>> c.dbname
-    'mydb'
-    >>> c.host
-    '1.2.3.4'
-    >>> c.port
-    '5432'
-
-    The standard URI format is also accessible:
-
-    >>> print(c.uri)
-    postgresql://anon:sec%27ret@1.2.3.4:5432/mydb?application_name=myapp
-
-    >>> print(ConnectionString(c, host='2001:db8::1234').uri)
-    postgresql://anon:sec%27ret@[2001:db8::1234]:5432/mydb?application_name=myapp
-
-    """
-
-    # Common libpq connection string elements. Not all of them. Use
-    # getattr to avoid exceptions when attempting to read the more
-    # obscure libpq connection string elements.
-    conn_str: str = None
-    host: str = None
-    dbname: str = None
-    port: str = None
-    user: str = None
-    password: str = None
-    uri: str = None
-
-    def __init__(self, conn_str=None, **kw):  # noqa
-        # Parse libpq key=value style connection string. Components
-        # passed by keyword argument override. If the connection string
-        # is invalid, some components may be skipped (but in practice,
-        # where database and usernames don't contain whitespace,
-        # quotes or backslashes, this doesn't happen).
-        def quote(x):
-            q = str(x).replace("\\", "\\\\").replace("'", "\\'")
-            q = q.replace('\n', ' ')  # \n is invalid in connection strings
-            if ' ' in q:
-                q = "'" + q + "'"
-            return q
-
-        def dequote(x):
-            q = str(x).replace("\\'", "'").replace("\\\\", "\\")
-            return q
-
-        if conn_str is not None:
-            r = re.compile(
-                r"""(?x)
-                    (\w+) \s* = \s*
-                    (?:
-                      '((?:.|\.)*?)' |
-                      (\S*)
-                    )
-                    (?=(?:\s|\Z))
-                """
-            )
-            for key, v1, v2 in r.findall(conn_str):
-                if key not in kw:
-                    kw[key] = dequote(v1 or v2)
-
-        c = " ".join("{}={}".format(k, quote(v)) for k, v in sorted(kw.items()) if v)
-        self.conn_str = c
-
-        for k, v in kw.items():
-            setattr(self, k, v)
-
-        self._keys = set(kw.keys())
-
-        # Construct the documented PostgreSQL URI for applications
-        # that use this format. PostgreSQL docs refer to this as a
-        # URI so we do do, even though it meets the requirements the
-        # more specific term URL.
-        fmt = ['postgresql://']
-        d = {k: urllib.parse.quote(str(v), safe='') for k, v in kw.items() if v}
-        if 'user' in d:
-            if 'password' in d:
-                fmt.append('{user}:{password}@')
-            else:
-                fmt.append('{user}@')
-        if 'host' in kw:
-            try:
-                hostaddr = ipaddress.ip_address(kw.get('hostaddr') or kw.get('host'))
-                if isinstance(hostaddr, ipaddress.IPv6Address):
-                    d['hostaddr'] = '[{}]'.format(hostaddr)
-                else:
-                    d['hostaddr'] = str(hostaddr)
-            except ValueError:
-                # Not an IP address, but hopefully a resolvable name.
-                d['hostaddr'] = d['host']
-            del d['host']
-            fmt.append('{hostaddr}')
-        if 'port' in d:
-            fmt.append(':{port}')
-        if 'dbname' in d:
-            fmt.append('/{dbname}')
-        main_keys = frozenset(['user', 'password', 'dbname', 'hostaddr', 'port'])
-        extra_fmt = ['{}={{{}}}'.format(extra, extra) for extra in sorted(d.keys()) if extra not in main_keys]
-        if extra_fmt:
-            fmt.extend(['?', '&'.join(extra_fmt)])
-        self.uri = ''.join(fmt).format(**d)
-
-    def keys(self) -> Iterable[str]:
-        return iter(self._keys)
-
-    def items(self) -> Iterable[Tuple[str, str]]:
-        return {k: self[k] for k in self.keys()}.items()
-
-    def values(self) -> Iterable[str]:
-        return iter(self[k] for k in self.keys())
-
-    def __getitem__(self, key) -> str:
-        if isinstance(key, int):
-            return super(ConnectionString, self).__getitem__(key)
-        try:
-            return getattr(self, key)
-        except AttributeError:
-            raise KeyError(key)
-
-    def __str__(self) -> str:
-        return self.conn_str
-
-    def __repr__(self) -> str:
-        return 'ConnectionString({!r})'.format(self.conn_str)
-
-    def __eq__(self, other) -> bool:
-        if not hasattr(other, 'conn_str'):
-            return NotImplemented
-        return self.conn_str == other.conn_str
-
-    def __lt__(self, other) -> bool:
-        if not hasattr(other, 'conn_str'):
-            return NotImplemented
-        return self.conn_str < other.conn_str
 
 
 class PostgreSQLRelationEvent(ops.charm.RelationEvent):
