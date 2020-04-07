@@ -18,15 +18,15 @@ LEADER_KEY = 'interface.pgsql'
 
 @functools.total_ordering
 class ConnectionString:
-    """A libpq connection string.
+    r"""A libpq connection string.
 
-    >>> c = ConnectionString(host='1.2.3.4', dbname='mydb',
-    ...                      port=5432, user='anon', password='secret')
+    >>> c = ConnectionString(host='1.2.3.4', dbname='mydb', port=5432, user='anon',
+    ...                      password="sec'ret", application_name='myapp')
     ...
-    >>> str(c)
-    'host=1.2.3.4 dbname=mydb port=5432 user=anon password=secret
-    >>> str(ConnectionString(str(c), dbname='otherdb'))
-    'host=1.2.3.4 dbname=otherdb port=5432 user=anon password=secret
+    >>> print(str(c))
+    application_name=myapp dbname=mydb host=1.2.3.4 password=sec\'ret port=5432 user=anon
+    >>> print(str(ConnectionString(str(c), dbname='otherdb')))
+    application_name=myapp dbname=otherdb host=1.2.3.4 password=sec\'ret port=5432 user=anon
 
     Components may be accessed as attributes.
 
@@ -39,8 +39,11 @@ class ConnectionString:
 
     The standard URI format is also accessible:
 
-    >>> c.uri
-    'postgresql://anon:secret@1.2.3.4:5432/mydb'
+    >>> print(c.uri)
+    postgresql://anon:sec%27ret@1.2.3.4:5432/mydb?application_name=myapp
+
+    >>> print(ConnectionString(c, host='2001:db8::1234').uri)
+    postgresql://anon:sec%27ret@[2001:db8::1234]:5432/mydb?application_name=myapp
 
     """
 
@@ -61,6 +64,17 @@ class ConnectionString:
         # is invalid, some components may be skipped (but in practice,
         # where database and usernames don't contain whitespace,
         # quotes or backslashes, this doesn't happen).
+        def quote(x):
+            q = str(x).replace("\\", "\\\\").replace("'", "\\'")
+            q = q.replace('\n', ' ')  # \n is invalid in connection strings
+            if ' ' in q:
+                q = "'" + q + "'"
+            return q
+
+        def dequote(x):
+            q = str(x).replace("\\'", "'").replace("\\\\", "\\")
+            return q
+
         if conn_str is not None:
             r = re.compile(
                 r"""(?x)
@@ -74,14 +88,7 @@ class ConnectionString:
             )
             for key, v1, v2 in r.findall(conn_str):
                 if key not in kw:
-                    kw[key] = v1 or v2
-
-        def quote(x):
-            q = str(x).replace("\\", "\\\\").replace("'", "\\'")
-            q = q.replace('\n', ' ')  # \n is invalid in connection strings
-            if ' ' in q:
-                q = "'" + q + "'"
-            return q
+                    kw[key] = dequote(v1 or v2)
 
         c = " ".join("{}={}".format(k, quote(v)) for k, v in sorted(kw.items()) if v)
         self.conn_str = c
@@ -96,7 +103,7 @@ class ConnectionString:
         # URI so we do do, even though it meets the requirements the
         # more specific term URL.
         fmt = ['postgresql://']
-        d = {k: urllib.parse.quote(v, safe='') for k, v in kw.items() if v}
+        d = {k: urllib.parse.quote(str(v), safe='') for k, v in kw.items() if v}
         if 'user' in d:
             if 'password' in d:
                 fmt.append('{user}:{password}@')
