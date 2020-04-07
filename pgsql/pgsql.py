@@ -27,7 +27,8 @@ __all__ = [
     'DatabaseAvailableEvent',
     'DatabaseChangedEvent',
     'DatabaseGoneEvent',
-    'DatabaseJoinedEvent',
+    'DatabaseRelationBrokenEvent',
+    'DatabaseRelationJoinedEvent',
     'MasterAvailableEvent',
     'MasterChangedEvent',
     'MasterGoneEvent',
@@ -58,7 +59,10 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
     @property
     def master(self) -> ConnectionString:
         '''The master database. None if there is currently no master.'''
-        return ConnectionString(_master(self.log, self.relation, self._local_unit))
+        conn_str = _master(self.log, self.relation, self._local_unit)
+        if conn_str:
+            return ConnectionString(conn_str)
+        return None
 
     @property
     def standbys(self) -> List[ConnectionString]:
@@ -176,11 +180,26 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         return logging.getLogger('pgsql.client.{}.event'.format(self.relation.name))
 
 
-class DatabaseJoinedEvent(PostgreSQLRelationEvent):
+class DatabaseRelationJoinedEvent(PostgreSQLRelationEvent):
     '''The pgsql relation has been joined.
 
     This is the best time to configure the relation, setting the database name,
     and required roles and extensions.
+    '''
+
+    pass
+
+
+class DatabaseRelationBrokenEvent(PostgreSQLRelationEvent):
+    '''The pgsql relation is gone.
+
+    Charms can watch for this event, setting their workload status to
+    'blocked' and shutting down services that require access to a
+    database to function.
+
+    This is subtly different to MasterGoneEvent, StandbyGoneEvent
+    & DatabaseGoneEvent in that the databases are not going to ever
+    come back.
     '''
 
     pass
@@ -223,25 +242,52 @@ class StandbyChangedEvent(PostgreSQLRelationEvent):
 
 
 class DatabaseGoneEvent(PostgreSQLRelationEvent):
-    '''All databases have gone from this relation; there are no databases.'''
+    '''All databases have gone from this relation; there are no databases.
+
+    The relation may still be active, and the databases may come back.
+    Charms requireing access to a database may set their workload
+    status to 'waiting' to indicate this state.
+
+    Charms generally won't watch for this event, instead watching for
+    DatabaseChangedEvent and seeing if the master attribute is None
+    and the standbys list empty.
+    '''
 
     pass
 
 
 class MasterGoneEvent(PostgreSQLRelationEvent):
-    '''The master database is gone from this relation; there may still be standby databases.'''
+    '''The master database is gone from this relation; there may still be standby databases.
+
+    The relation may still be active, and the master may come back.
+    Charms requireing access to a master may set their workload status
+    to 'waiting' to indicate this state.
+
+    Charms generally won't watch for this event, instead watching for
+    MasterChangedEvent and seeing if the master attribute is None.
+    '''
 
     pass
 
 
 class StandbyGoneEvent(PostgreSQLRelationEvent):
-    '''All standby databases are gone from this relation; there may still be a master database.'''
+    '''All standby databases are gone from this relation; there may still be a master database.
+
+    The relation may still be active, and the standbys may come back.
+    Charms requireing access to hot standbys may set their workload
+    status to 'waiting' to indicate this state.
+
+    Charms generally won't watch for this event, instead watching
+    for StandbyChangedEvent and seeing if the standbys attribute is
+    an empty list.
+    '''
 
     pass
 
 
 class PostgreSQLClientEvents(ops.framework.EventSetBase):
-    database_joined = ops.framework.EventSource(DatabaseJoinedEvent)
+    database_relation_joined = ops.framework.EventSource(DatabaseRelationJoinedEvent)
+    database_relation_broken = ops.framework.EventSource(DatabaseRelationBrokenEvent)
     database_available = ops.framework.EventSource(DatabaseAvailableEvent)
     master_available = ops.framework.EventSource(MasterAvailableEvent)
     standby_available = ops.framework.EventSource(StandbyAvailableEvent)
@@ -272,7 +318,6 @@ class PostgreSQLClient(ops.framework.Object):
 
         self.framework.observe(charm.on[relation_name].relation_joined, self._on_joined)
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_changed)
-        self.framework.observe(charm.on[relation_name].relation_departed, self._on_changed)
         self.framework.observe(charm.on[relation_name].relation_broken, self._on_broken)
         self.framework.observe(charm.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(charm.on.leader_elected, self._on_leader_change)
@@ -289,8 +334,8 @@ class PostgreSQLClient(ops.framework.Object):
     def _on_joined(self, event: ops.charm.RelationEvent) -> None:
         self.log.debug('_on_joined for relation %r', event.relation.id)
         self._mirror_appdata()  # PostgreSQL charm backwards compatibility
-        self.log.info('emitting database_joined event for relation %r', event.relation.id)
-        self.on.database_joined.emit(**self._db_event_args(event))
+        self.log.info('emitting database_relation_joined event for relation %r', event.relation.id)
+        self.on.database_relation_joined.emit(**self._db_event_args(event))
         self._state.rels[event.relation.id] = dict(master=None, standbys=None)
 
     def _on_changed(self, event: ops.charm.RelationEvent) -> None:
@@ -356,10 +401,60 @@ class PostgreSQLClient(ops.framework.Object):
         self._state.rels[relid]['standbys'] = new_standbys
 
     def _on_broken(self, event: ops.charm.RelationEvent) -> None:
-        self.log.debug('_on_broken for relation %r', event.relation.id)
-        if event.relation.id in self._state.rels:
-            self.log.info('cleaning up broken relation %r', event.relation.id)
-            del self._state.rels[event.relation.id]
+        relid = event.relation.id
+        self.log.debug('_on_broken for relation %r', relid)
+        rd = self._state.rels.get(relid, {})
+        db_gone = False
+        kwargs = self._db_event_args(event)
+
+        # We need to handle the final changed and gone events here,
+        # because we don't handle departed events. We don't handle
+        # departed events because with Juju 2.7.5 we can't tell if the
+        # remote unit is departing, or if the local unit is. If the
+        # local unit is departing, it likely already has had its
+        # access revoked to some of the databases, but doesn't know
+        # about it yet because there are several other
+        # relation-departed hooks to run. By not handling
+        # relation-departed hooks, we can avoid alerting the charm
+        # with updated lists of connection strings that may not
+        # actually be valid. It also has the side effect of alerting
+        # the charm with a single event when the relation is torn
+        # down, rather than one for every remote unit. Note that we
+        # can avoid handling departed only because the pgsql relation
+        # protocol ensures that if a remote unit departes, the other
+        # remote units update their relation data and we get a
+        # relation-changed event. Also note that most relations don't
+        # share this problem because the relation data for a remote
+        # unit only contains information about that particular remote
+        # unit, while the pgsql interface contains information about
+        # the remote unit and its peers (this choice was made to
+        # support proxies like pgbouncer, where 2 pgbouncer units can
+        # both present endpoints for each of 3 or more postgresql
+        # units).
+        if rd.get('master'):
+            self.log.info('emitting master_changed event for relation %r', relid)
+            self.on.master_changed.emit(**kwargs)
+            self.log.info('emitting master_gone event for relation %r', relid)
+            self.on.master_gone.emit(**kwargs)
+            db_gone = True
+        if rd.get('standbys'):
+            self.log.info('emitting standby_changed event for relation %r', relid)
+            self.on.standby_changed.emit(**kwargs)
+            self.log.info('emitting standby_gone event for relation %r', relid)
+            self.on.standby_gone.emit(**kwargs)
+            db_gone = True
+        if db_gone:
+            self.log.info('emitting database_changed event for relation %r', relid)
+            self.on.database_changed.emit(**kwargs)
+            self.log.info('emitting database_gone event for relation %r', relid)
+            self.on.database_gone.emit(**kwargs)
+
+        self.log.info('emitting database_relation_broken event for relation %r', relid)
+        self.on.database_relation_broken.emit(**kwargs)
+
+        if relid in self._state.rels:
+            self.log.info('cleaning up broken relation %r', relid)
+            del self._state.rels[relid]
 
     def _on_upgrade_charm(self, event: ops.charm.UpgradeCharmEvent) -> None:
         self.log.debug('_on_upgrade_charm for relation %r', self.relation_name)
