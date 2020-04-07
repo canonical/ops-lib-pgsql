@@ -1,3 +1,16 @@
+# Copyright 2016-2019 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import logging
 import subprocess
 from typing import Dict, Iterable, List, Mapping
@@ -188,18 +201,26 @@ class MasterChangedEvent(PostgreSQLRelationEvent):
 
 
 class StandbyChangedEvent(PostgreSQLRelationEvent):
+    '''Connection details to one or more standby databases on this relation have changed.'''
+
     pass
 
 
 class DatabaseGoneEvent(PostgreSQLRelationEvent):
+    '''All databases have gone from this relation; there are no databases.'''
+
     pass
 
 
 class MasterGoneEvent(PostgreSQLRelationEvent):
+    '''The master database is gone from this relation; there may still be standby databases.'''
+
     pass
 
 
 class StandbyGoneEvent(PostgreSQLRelationEvent):
+    '''All standby databases are gone from this relation; there may still be a master database.'''
+
     pass
 
 
@@ -222,6 +243,9 @@ class PostgreSQLClient(ops.framework.Object):
     on = PostgreSQLClientEvents()
     _state = ops.framework.StoredState()
 
+    relation_name: str = None
+    log: logging.Logger = None
+
     def __init__(self, charm: ops.charm.CharmBase, relation_name: str):
         super().__init__(charm, relation_name)
 
@@ -238,7 +262,7 @@ class PostgreSQLClient(ops.framework.Object):
         self.framework.observe(charm.on.leader_elected, self._on_leader_change)
         self.framework.observe(charm.on.leader_settings_changed, self._on_leader_change)
 
-    def _db_event_args(self, relation_event):
+    def _db_event_args(self, relation_event: ops.charm.RelationEvent):
         return dict(
             relation=relation_event.relation,
             app=relation_event.app,
@@ -351,8 +375,8 @@ class PostgreSQLClient(ops.framework.Object):
         The PostgreSQL charm supports older versions of Juju and does
         not read application relation data, instead waiting on
         consensus in the units' relation data. Until it is updated to
-        read application relation data, we mirror the application data
-        to the unit relation data for backwards compatibility.
+        read application relation data directly, we mirror the application
+        data to the unit relation data for backwards compatibility.
 
         Per https://bugs.launchpad.net/bugs/1869915, non-lead units
         cannot read their own application relation data, so we instead

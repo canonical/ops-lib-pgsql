@@ -1,3 +1,16 @@
+# Copyright 2016-2019 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import functools
 import ipaddress
 import re
@@ -26,6 +39,13 @@ class ConnectionString:
     >>> c.port
     '5432'
 
+    Standard components will default to None if not explicitly set. See
+    https://www.postgresql.org/docs/12/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+    for the list of standard keywords.
+
+    >>> c.connect_timeout is None
+    True
+
     The standard URI format is also accessible:
 
     >>> print(c.uri)
@@ -35,6 +55,9 @@ class ConnectionString:
     postgresql://anon:sec%27ret@[2001:db8::1234]:5432/mydb?application_name=myapp
 
     """
+    conn_str: str = None  # libpq connection string, as returned by __str__()
+
+    uri: str = None  # libpq connection URI (or URL, but PostgreSQL docs refer to URI)
 
     # libpq connection string elements, per
     # https://www.postgresql.org/docs/12/libpq-connect.html#LIBPQ-PARAMKEYWORDS
@@ -71,11 +94,7 @@ class ConnectionString:
     service: str = None
     target_session_attrs: str = None
 
-    conn_str: str = None  # libpq connection string, as returned by __str__()
-
-    uri: str = None  # libpq connection URI (or URL, but PostgreSQL docs refer to URI)
-
-    def __init__(self, conn_str: str=None, **kw):  # noqa
+    def __init__(self, conn_str: str = None, **kw):  # noqa
         # Parse libpq key=value style connection string. Components
         # passed by keyword argument override. If the connection string
         # is invalid, some components may be skipped (but in practice,
