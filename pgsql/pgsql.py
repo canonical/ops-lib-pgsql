@@ -463,12 +463,16 @@ class PostgreSQLClient(ops.framework.Object):
         if self.model.unit.is_leader():
             new_lead_data = {}
             for rel in self.model.relations[self.relation_name]:
-                self.log.info('leader migrating legacy relation data to app relation data for relation %r', rel.id)
+                logged = False
                 new_lead_data[rel.id] = {}
                 ldata = rel.data[self.model.unit]
                 adata = rel.data[self.model.unit.app]
                 for k in ['database', 'roles', 'extensions']:
                     if k in ldata and k not in adata:
+                        if not logged:
+                            self.log.info('leader migrating legacy relation data to app relation data '
+                                          'for relation %r', rel.id)
+                            logged = True
                         adata[k] = ldata[k]
                     new_lead_data[rel.id][k] = adata.get(k, '')
             _set_pgsql_leader_data(new_lead_data)
