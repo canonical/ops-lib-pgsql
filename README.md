@@ -16,7 +16,7 @@ ln -s ../../mod/interface-pgsql/pgsql lib/interface/
 Your charm needs to bootstrap it and handle events:
 
 ```python
-from interfaces import pgsql
+from interface import pgsql
 
 
 class MyCharm(ops.charm.CharmBase):
