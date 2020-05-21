@@ -285,7 +285,7 @@ class StandbyGoneEvent(PostgreSQLRelationEvent):
     pass
 
 
-class PostgreSQLClientEvents(ops.framework.EventSetBase):
+class PostgreSQLClientEvents(ops.framework.ObjectEvents):
     database_relation_joined = ops.framework.EventSource(DatabaseRelationJoinedEvent)
     database_relation_broken = ops.framework.EventSource(DatabaseRelationBrokenEvent)
     database_available = ops.framework.EventSource(DatabaseAvailableEvent)
