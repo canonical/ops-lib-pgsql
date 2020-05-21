@@ -45,7 +45,7 @@ class MyCharm(ops.charm.CharmBase):
         # Enforce a single 'db' relation, or else we risk directing writes to
         # an the wrong backend. This can happen via user error, or redeploying
         # the PostgreSQL backend.
-        if len(self.model.relations['db']) > 0:
+        if len(self.model.relations['db']) > 1:
             self.unit.status = ops.model.BlockedStatus("Too many db relations!")
             event.defer()
             return
@@ -71,7 +71,7 @@ class MyCharm(ops.charm.CharmBase):
         # are available.
 
     def on_standby_changed(self, event: pgsql.StandbyChangedEvent):
-         if len(self.model.relations['db']) > 0:
+         if len(self.model.relations['db']) > 1:
             self.unit.status = ops.model.BlockedStatus("Too many db relations!")
             event.defer()
             return
