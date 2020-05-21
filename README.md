@@ -26,11 +26,11 @@ class MyCharm(ops.charm.CharmBase):
         super().__init__(*args)
         self.state.set_default(db_conn_str=None, db_uri=None, db_ro_uris=[])
         self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation required in metadata.yaml
-        self.framework.observe(self.db.on.database_joined, self.on_database_joined)
+        self.framework.observe(self.db.on.database_joined, self.on_database_relation_joined)
         self.framework.observe(self.db.on.master_changed, self.on_master_changed)
         self.framework.observe(self.db.on.standby_changed, self.on_standby_changed)
 
-    def on_database_joined(self, event: pgsql.DatabaseJoinedEvent):
+    def on_database_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
             event.database = 'mydbname'  # Request database named mydbname
