@@ -578,7 +578,7 @@ def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops
         if raw:
             if _is_ready(log, appdata, locdata, reldata):
                 log.debug('ready standbys found on relation %s', relation.id)
-                return (conn_str for conn_str in raw.splitlines() if conn_str)
+                return [conn_str for conn_str in raw.splitlines() if conn_str]
             log.debug('unready standbys found on relation %s', relation.id)
     log.debug('no ready standbys found on relation %s', relation.id)
     return []
