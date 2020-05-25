@@ -13,6 +13,16 @@ mkdir lib/interface
 ln -s ../../mod/interface-pgsql/pgsql lib/interface/
 ```
 
+Your charm needs to declare its use of the interface in its `metadata.yaml` file:
+
+```yaml
+requires:
+  db:
+    interface: pgsql
+    limit: 1  # Most charms only handle a single PostgreSQL Application.
+```
+
+
 Your charm needs to bootstrap it and handle events:
 
 ```python
@@ -20,17 +30,17 @@ from interface import pgsql
 
 
 class MyCharm(ops.charm.CharmBase):
-    state = ops.framework.StoredState()
+    _state = ops.framework.StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.state.set_default(db_conn_str=None, db_uri=None, db_ro_uris=[])
-        self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation required in metadata.yaml
-        self.framework.observe(self.db.on.database_joined, self.on_database_relation_joined)
-        self.framework.observe(self.db.on.master_changed, self.on_master_changed)
-        self.framework.observe(self.db.on.standby_changed, self.on_standby_changed)
+        self._state.set_default(db_conn_str=None, db_uri=None, db_ro_uris=[])
+        self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation in metadata.yaml
+        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
+        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+        self.framework.observe(self.db.on.standby_changed, self._on_standby_changed)
 
-    def on_database_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
+    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
             event.database = 'mydbname'  # Request database named mydbname
@@ -41,21 +51,10 @@ class MyCharm(ops.charm.CharmBase):
             event.defer()
             return
 
-    def on_master_changed(self, event: pgsql.MasterChangedEvent):
-        # Enforce a single 'db' relation, or else we risk directing writes to
-        # an the wrong backend. This can happen via user error, or redeploying
-        # the PostgreSQL backend.
-        if len(self.model.relations['db']) > 1:
-            self.unit.status = ops.model.BlockedStatus("Too many db relations!")
-            event.defer()
-            return
-        if event.relation.id not in (r.id for r in self.model.relations['db']):
-            return  # Deferred event for relation that no longer exists.
-
+    def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'mydbname':
-            # Leader has not yet set requirements. Defer, or risk connecting to
-            # an incorrect database.
-            event.defer()
+            # Leader has not yet set requirements. Wait until next event,
+            # or risk connecting to an incorrect database.
             return
         
         # The connection to the primary database has been created,
@@ -63,25 +62,17 @@ class MyCharm(ops.charm.CharmBase):
         # most charms will find it easier to just handle the Changed
         # events. event.master is None if the master database is not
         # available, or a pgsql.ConnectionString instance.
-        self.state.db_conn_str = None if event.master is None else event.master.conn_str
-        self.state.db_uri = None if event.master is None else event.master.uri
+        self._state.db_conn_str = None if event.master is None else event.master.conn_str
+        self._state.db_uri = None if event.master is None else event.master.uri
 
         # You probably want to emit an event here or call a setup routine to
         # do something useful with the libpq connection string or URI now they
         # are available.
 
-    def on_standby_changed(self, event: pgsql.StandbyChangedEvent):
-         if len(self.model.relations['db']) > 1:
-            self.unit.status = ops.model.BlockedStatus("Too many db relations!")
-            event.defer()
-            return
-        if event.relation.id not in (r.id for r in self.model.relations['db']):
-            return  # Deferred event for relation that no longer exists.
-
+    def _on_standby_changed(self, event: pgsql.StandbyChangedEvent):
         if event.database != 'mydbname':
-            # Leader has not yet set requirements. Defer, or risk connecting to
-            # an incorrect database.
-            event.defer()
+            # Leader has not yet set requirements. Wait until next event,
+            # or risk connecting to an incorrect database.
             return
 
         # Charms needing access to the hot standby databases can get
@@ -90,5 +81,5 @@ class MyCharm(ops.charm.CharmBase):
         # standby replica databases, rather than only use the single
         # master. event.stanbys will be an empty list if no hot standby
         # databases are available.
-        self.state.db_ro_uris = [c.uri for c in event.standbys]
+        self._state.db_ro_uris = [c.uri for c in event.standbys]
 ```
