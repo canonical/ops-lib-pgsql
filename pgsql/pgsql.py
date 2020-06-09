@@ -346,8 +346,8 @@ class PostgreSQLClient(ops.framework.Object):
         rel = event.relation
         relid = rel.id
 
-        prev_master = self._state.rels[relid]['master']
-        prev_standbys = self._state.rels[relid]['standbys']
+        prev_master = self._state.rels.get(relid, {}).get('master', None)
+        prev_standbys = self._state.rels.get(relid, {}).get('standbys', [])
         new_master = _master(self.log, rel, self.model.unit)
         new_standbys = _standbys(self.log, rel, self.model.unit)
 
