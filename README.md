@@ -8,7 +8,7 @@ To use this interface in your Juju Operator Framework charm, first
 install it into your git branch:
 
 ```
-git submodule add git+ssh://git.launchpad.net/~stub/interface-pgsql/+git/operator mod/interface-pgsql
+git submodule add https://github.com/canonical/interface-pgsql.git mod/interface-pgsql
 mkdir lib/interface
 ln -s ../../mod/interface-pgsql/pgsql lib/interface/
 ```
