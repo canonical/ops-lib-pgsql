@@ -9,8 +9,7 @@ install it into your git branch:
 
 ```
 git submodule add https://github.com/canonical/interface-pgsql.git mod/interface-pgsql
-mkdir lib/interface
-ln -s ../../mod/interface-pgsql/pgsql lib/interface/
+ln -s ../mod/interface-pgsql lib/interface-pgsql
 ```
 
 Your charm needs to declare its use of the interface in its `metadata.yaml` file:
@@ -26,7 +25,7 @@ requires:
 Your charm needs to bootstrap it and handle events:
 
 ```python
-from interface import pgsql
+pgsql = ops.lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 
 class MyCharm(ops.charm.CharmBase):
