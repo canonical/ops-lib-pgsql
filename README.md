@@ -1,15 +1,14 @@
 Juju Operator Framework Charm Interface for PostgreSQL Relations
 ================================================================
 
-/!\ Alpha. Everything here subject to change based on feedback and
-emerging consensus.
-
-To use this interface in your Juju Operator Framework charm, first
-install it into your git branch:
+To use this interface in your Juju Operator Framework charm, instruct
+[charmcraft](https://github.com/canonical/charmcraft) to embed it into
+your built Operator Framework charm by adding it to your
+`requirements.txt` file::
 
 ```
-git submodule add https://github.com/canonical/interface-pgsql.git mod/interface-pgsql
-ln -s ../mod/interface-pgsql lib/interface-pgsql
+ops
+git+https://github.com/canonical/interface-pgsql
 ```
 
 Your charm needs to declare its use of the interface in its `metadata.yaml` file:
@@ -25,7 +24,9 @@ requires:
 Your charm needs to bootstrap it and handle events:
 
 ```python
-pgsql = ops.lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
+import pgsql
+# or:
+# pgsql = ops.lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 
 class MyCharm(ops.charm.CharmBase):
