@@ -29,7 +29,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/canonical/interface-pgsql",
-    packages=['pgsql', 'opslib.pgsql'],
+    packages=['pgsql', 'pgsql.opslib.pgsql'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
