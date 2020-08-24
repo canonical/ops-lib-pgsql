@@ -106,8 +106,8 @@ class ConnectionString:
         # quotes or backslashes, this doesn't happen).
         def quote(x: Any):
             q = str(x).replace("\\", "\\\\").replace("'", "\\'")
-            q = q.replace('\n', ' ')  # \n is invalid in connection strings
-            if ' ' in q:
+            q = q.replace("\n", " ")  # \n is invalid in connection strings
+            if " " in q:
                 q = "'" + q + "'"
             return q
 
@@ -142,34 +142,34 @@ class ConnectionString:
         # that use this format. PostgreSQL docs refer to this as a
         # URI so we do do, even though it meets the requirements the
         # more specific term URL.
-        fmt = ['postgresql://']
-        d = {k: urllib.parse.quote(str(v), safe='') for k, v in kw.items() if v}
-        if 'user' in d:
-            if 'password' in d:
-                fmt.append('{user}:{password}@')
+        fmt = ["postgresql://"]
+        d = {k: urllib.parse.quote(str(v), safe="") for k, v in kw.items() if v}
+        if "user" in d:
+            if "password" in d:
+                fmt.append("{user}:{password}@")
             else:
-                fmt.append('{user}@')
-        if 'host' in kw:
+                fmt.append("{user}@")
+        if "host" in kw:
             try:
-                hostaddr = ipaddress.ip_address(kw.get('hostaddr') or kw.get('host'))
+                hostaddr = ipaddress.ip_address(kw.get("hostaddr") or kw.get("host"))
                 if isinstance(hostaddr, ipaddress.IPv6Address):
-                    d['hostaddr'] = '[{}]'.format(hostaddr)
+                    d["hostaddr"] = "[{}]".format(hostaddr)
                 else:
-                    d['hostaddr'] = str(hostaddr)
+                    d["hostaddr"] = str(hostaddr)
             except ValueError:
                 # Not an IP address, but hopefully a resolvable name.
-                d['hostaddr'] = d['host']
-            del d['host']
-            fmt.append('{hostaddr}')
-        if 'port' in d:
-            fmt.append(':{port}')
-        if 'dbname' in d:
-            fmt.append('/{dbname}')
-        main_keys = frozenset(['user', 'password', 'dbname', 'hostaddr', 'port'])
-        extra_fmt = ['{}={{{}}}'.format(extra, extra) for extra in sorted(d.keys()) if extra not in main_keys]
+                d["hostaddr"] = d["host"]
+            del d["host"]
+            fmt.append("{hostaddr}")
+        if "port" in d:
+            fmt.append(":{port}")
+        if "dbname" in d:
+            fmt.append("/{dbname}")
+        main_keys = frozenset(["user", "password", "dbname", "hostaddr", "port"])
+        extra_fmt = ["{}={{{}}}".format(extra, extra) for extra in sorted(d.keys()) if extra not in main_keys]
         if extra_fmt:
-            fmt.extend(['?', '&'.join(extra_fmt)])
-        self.uri = ''.join(fmt).format(**d)
+            fmt.extend(["?", "&".join(extra_fmt)])
+        self.uri = "".join(fmt).format(**d)
 
     def keys(self) -> Iterable[str]:
         return iter(self._keys)
@@ -192,7 +192,7 @@ class ConnectionString:
         return self.conn_str
 
     def __repr__(self) -> str:
-        return 'ConnectionString({!r})'.format(self.conn_str)
+        return "ConnectionString({!r})".format(self.conn_str)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, ConnectionString):
