@@ -4,12 +4,12 @@ Juju Operator Framework Charm Interface for PostgreSQL Relations
 To use this interface in your
 [Juju Operator Framework](https://github.com/canonical/operator) charm,
 instruct [charmcraft](https://github.com/canonical/charmcraft) to embed
-it into your built Operator Framework charm by adding interface-pgsql to
+it into your built Operator Framework charm by adding ops-lib-pgsql to
 your `requirements.txt` file::
 
 ```
 ops
-git+https://github.com/canonical/interface-pgsql
+ops-lib-pgsql
 ```
 
 Your charm needs to declare its use of the interface in its `metadata.yaml` file:
