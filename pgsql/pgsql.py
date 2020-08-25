@@ -632,7 +632,7 @@ def _set_pgsql_leader_data(d: Dict[int, Dict[str, str]]) -> None:
     _leader_set({LEADER_KEY: yaml.dump(d)})
 
 
-def _leader_get(attribute: str):
+def _leader_get(attribute: str) -> str:
     cmd = ["leader-get", "--format=yaml", attribute]
     return yaml.safe_load(subprocess.check_output(cmd).decode("UTF-8"))
 
