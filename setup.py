@@ -31,9 +31,13 @@ setuptools.setup(
     url="https://github.com/canonical/ops-lib-pgsql",
     packages=["pgsql", "pgsql.opslib.pgsql"],
     classifiers=[
-        "Programming Language :: Python :: 3",
+        "Development Status :: 5 - Production/Stable",
+        "Programming Language :: Python :: 3 :: Only",
         "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
         "Operating System :: OS Independent",
     ],
+    keywords="juju charm opslib postgres postgresql pgsql",
+    project_urls={"Juju": "https://juju.is/", "Juju Operator Framework": "https://pypi.org/project/ops/",},
     python_requires=">=3.6",
+    install_requires=["ops >= 0.8.0", "PyYAML"],
 )
