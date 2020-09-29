@@ -99,6 +99,8 @@ class ConnectionString:
     target_session_attrs: str = None
 
     def __init__(self, conn_str: str = None, **kw):  # noqa
+        kw = dict(kw)  # Don't mutate argument.
+
         # Parse libpq key=value style connection string. Components
         # passed by keyword argument override. If the connection string
         # is invalid, some components may be skipped (but in practice,
