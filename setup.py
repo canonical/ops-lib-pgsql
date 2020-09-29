@@ -22,7 +22,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="ops-lib-pgsql",
-    version="1.0.0",
+    version="1.0.1",
     author="PostgreSQL Charmers",
     author_email="postgresql-charmers@lists.launchpad.net",
     description="PostgreSQL database relation for Juju Operator Framework Charms",
