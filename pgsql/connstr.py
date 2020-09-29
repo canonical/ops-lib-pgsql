@@ -55,7 +55,7 @@ class ConnectionString:
     >>> print(c.uri)
     postgresql://anon:sec%27ret@1.2.3.4:5432/mydb?application_name=myapp
 
-    >>> print(ConnectionString(c.conn_str, host='2001:db8::1234').uri)
+    >>> print(ConnectionString(c, host='2001:db8::1234').uri)
     postgresql://anon:sec%27ret@[2001:db8::1234]:5432/mydb?application_name=myapp
 
     """
@@ -116,19 +116,24 @@ class ConnectionString:
             return q
 
         if conn_str is not None:
-            r = re.compile(
-                r"""(?x)
-                    (\w+) \s* = \s*
-                    (?:
-                      '((?:.|\.)*?)' |
-                      (\S*)
-                    )
-                    (?=(?:\s|\Z))
-                """
-            )
-            for key, v1, v2 in r.findall(conn_str):
-                if key not in kw:
-                    kw[key] = dequote(v1 or v2)
+            if isinstance(conn_str, ConnectionString):
+                for key in conn_str.keys():
+                    if key not in kw:
+                        kw[key] = getattr(conn_str, key)
+            else:
+                r = re.compile(
+                    r"""(?x)
+                        (\w+) \s* = \s*
+                        (?:
+                        '((?:.|\.)*?)' |
+                        (\S*)
+                        )
+                        (?=(?:\s|\Z))
+                    """
+                )
+                for key, v1, v2 in r.findall(conn_str):
+                    if key not in kw:
+                        kw[key] = dequote(v1 or v2)
 
         for k,v in kw.items():
             if not isinstance(v, str):
