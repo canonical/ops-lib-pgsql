@@ -1,6 +1,12 @@
 Juju Operator Framework Charm Interface for PostgreSQL Relations
 ================================================================
 
+[![PyPI version](https://badge.fury.io/py/ops-lib-pgsql.svg)](https://badge.fury.io/py/ops-lib-pgsql)
+[![PyPI Supported Python Versions](https://img.shields.io/pypi/pyversions/ops-lib-pgsql.svg)](https://pypi.python.org/pypi/ops-lib-pgsql/)
+[![GitHub license](https://img.shields.io/github/license/canonical/ops-lib-pgsql)](https://github.com/canonical/ops-lib-pgsql/blob/master/LICENSE)
+[![GitHub Actions (Tests)](https://github.com/canonical/ops-lib-pgsql/workflows/Tests/badge.svg)](https://github.com/canonical/ops-lib-pgsql)
+
+
 To use this interface in your
 [Juju Operator Framework](https://github.com/canonical/operator) charm,
 instruct [charmcraft](https://github.com/canonical/charmcraft) to embed
