@@ -17,3 +17,6 @@
 
 test:
 	tox
+
+lint:
+	tox -e lint
