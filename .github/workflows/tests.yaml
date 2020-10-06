@@ -1,4 +1,4 @@
-name: Automatic lint check and testing
+name: Tests
 
 on:
   push:
