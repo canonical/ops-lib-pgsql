@@ -590,7 +590,10 @@ def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops
 
 
 def _is_ready(
-    log: logging.Logger, appdata: Mapping, locdata: ops.model.RelationData, reldata: ops.model.RelationData,
+    log: logging.Logger,
+    appdata: Mapping,
+    locdata: ops.model.RelationData,
+    reldata: ops.model.RelationData,
 ) -> bool:
     # The relation is not ready for use if the server has not yet
     # mirrored relation config set by the client. This is how we

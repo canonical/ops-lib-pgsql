@@ -137,7 +137,7 @@ class ConnectionString:
                     if key not in kw:
                         kw[key] = dequote(v1 or v2)
 
-        for k,v in kw.items():
+        for k, v in kw.items():
             if not isinstance(v, str):
                 kw[k] = str(v)
 

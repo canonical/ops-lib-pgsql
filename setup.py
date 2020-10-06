@@ -37,7 +37,10 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     keywords="juju charm opslib postgres postgresql pgsql",
-    project_urls={"Juju": "https://juju.is/", "Juju Operator Framework": "https://pypi.org/project/ops/",},
+    project_urls={
+        "Juju": "https://juju.is/",
+        "Juju Operator Framework": "https://pypi.org/project/ops/",
+    },
     python_requires=">=3.6",
     install_requires=["ops >= 0.8.0", "PyYAML"],
 )
