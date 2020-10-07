@@ -18,7 +18,7 @@
 """
 PostgreSQL relation interface for the Operator Framework.
 """
-from .pgsql import *  # noqa
+from .client import *  # noqa
 from .connstr import ConnectionString  # noqa
 
 
