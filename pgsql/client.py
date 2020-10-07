@@ -98,9 +98,16 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
 
     @database.setter
     def database(self, dbname: str) -> None:
+        if dbname is None:
+            dbname = ""
         self.relation.data[self._local_unit.app]["database"] = dbname
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]["database"] = dbname
+        # Inform our peers, since they can't read the appdata
+        d = _get_pgsql_leader_data()
+        d.setdefault(self.relation.id, {})["database"] = dbname
+        _set_pgsql_leader_data(d)
+
         self.log.debug("database set to %s on relation %s", dbname, self.relation.id)
 
     @property
@@ -128,14 +135,20 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         # appdata = self.relation.data[self.unit.app]
         appdata = _get_pgsql_leader_data().get(self.relation.id, {})
         sroles = appdata.get("roles") or ""
-        return list(sroles.split(","))
+        return list(r for r in sroles.split(",") if r)
 
     @roles.setter
     def roles(self, roles: Iterable[str]) -> None:
+        if roles is None:
+            roles = []
         sroles = ",".join(sorted(roles))
         self.relation.data[self._local_unit.app]["roles"] = sroles
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]["roles"] = sroles
+        # Inform our peers, since they can't read the appdata
+        d = _get_pgsql_leader_data()
+        d.setdefault(self.relation.id, {})["roles"] = sroles
+        _set_pgsql_leader_data(d)
         self.log.debug("roles set to %s on relation %s", sroles, self.relation.id)
 
     @property
@@ -157,14 +170,20 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         # appdata = self.relation.data[self.unit.app]
         appdata = _get_pgsql_leader_data().get(self.relation.id, {})
         sext = appdata.get("extensions") or ""
-        return list(sext.split(","))
+        return list(e for e in sext.split(",") if e)
 
     @extensions.setter
     def extensions(self, extensions: Iterable[str]) -> None:
+        if extensions is None:
+            extensions = []
         sext = ",".join(sorted(extensions))
         self.relation.data[self._local_unit.app]["extensions"] = sext
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]["extensions"] = sext  # Deprecated, should be app reldata
+        # Inform our peers, since they can't read the appdata
+        d = _get_pgsql_leader_data()
+        d.setdefault(self.relation.id, {})["extensions"] = sext
+        _set_pgsql_leader_data(d)
         self.log.debug("extensions set to %s on relation %s", sext, self.relation.id)
 
     def snapshot(self):
@@ -490,7 +509,7 @@ class PostgreSQLClient(ops.framework.Object):
         self._mirror_appdata()  # PostgreSQL charm backwards compatibility
 
     def _mirror_appdata(self) -> None:
-        """Mirror the relation configuration in relation app data to unit relation data.
+        """Mirror the relation configuration in relation app data to unit relation and leadership data.
 
         The PostgreSQL charm supports older versions of Juju and does
         not read application relation data, instead waiting on
