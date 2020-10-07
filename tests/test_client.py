@@ -117,7 +117,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertIsNone(client._master(self.log, self.relation, self.local_unit))
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -131,7 +134,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._master(self.log, self.relation, self.local_unit), rd["master"])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -171,7 +177,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), [])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -185,7 +194,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), standbys)
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -211,28 +223,28 @@ class TestPGSQLHelpers(TestPGSQLBase):
         # versions of Juju that predate cross-model relation support.
         # This should not happen with supported Juju versions.
         self.assertTrue(client._is_ready(self.log, {}, {}, {}))
-        self.assertTrue(client._is_ready(self.log, {}, {}, {'allowed-subnets': '127.23.0.0/24'}))
+        self.assertTrue(client._is_ready(self.log, {}, {}, {"allowed-subnets": "127.23.0.0/24"}))
 
     def test_is_ready_no_allowed(self):
         # The relation is not ready if allowed-subnets does not contain our egress-subnets.
         # The remote end has not yet granted the local unit access.
-        self.assertFalse(client._is_ready(self.log, {}, {'egress-subnets': '127.23.0.0/24'}, {}))
+        self.assertFalse(client._is_ready(self.log, {}, {"egress-subnets": "127.23.0.0/24"}, {}))
         self.assertFalse(
-            client._is_ready(self.log, {}, {'egress-subnets': '127.23.0.0/24'}, {'allowed-subnets': '127.0.1/24'})
+            client._is_ready(self.log, {}, {"egress-subnets": "127.23.0.0/24"}, {"allowed-subnets": "127.0.1/24"})
         )
 
     def test_is_ready_defaults(self):
         # allowed-subnets grants access, and default database settings requested.
         self.assertTrue(
             client._is_ready(
-                self.log, {}, {'egress-subnets': '127.23.1.0/24'}, {'allowed-subnets': '127.23.0.0/24,127.23.1.0/24'}
+                self.log, {}, {"egress-subnets": "127.23.1.0/24"}, {"allowed-subnets": "127.23.0.0/24,127.23.1.0/24"}
             )
         )
 
     def test_is_ready_mismatch(self):
         # The relation is not ready if database settings (such as the
         # database name) have not been mirrored back.
-        for k in ['database', 'roles', 'extensions']:
+        for k in ["database", "roles", "extensions"]:
             with self.subTest(f"{k} mismatch"):
                 # Requested setting should be available in application
                 # shared data. This could be leadership data or a peer
@@ -240,17 +252,17 @@ class TestPGSQLHelpers(TestPGSQLBase):
                 self.assertFalse(
                     client._is_ready(
                         self.log,
-                        {k: 'value'},
-                        {'egress-subnets': '127.23.0.0/24'},
-                        {'allowed-subnets': '127.23.1.0/24'},
+                        {k: "value"},
+                        {"egress-subnets": "127.23.0.0/24"},
+                        {"allowed-subnets": "127.23.1.0/24"},
                     )
                 )
                 self.assertFalse(
                     client._is_ready(
                         self.log,
-                        {k: 'value'},
-                        {'egress-subnets': '127.23.0.0/24'},
-                        {'allowed-subnets': '127.23.1.0/24', k: 'different'},
+                        {k: "value"},
+                        {"egress-subnets": "127.23.0.0/24"},
+                        {"allowed-subnets": "127.23.1.0/24", k: "different"},
                     )
                 )
 
@@ -258,21 +270,20 @@ class TestPGSQLHelpers(TestPGSQLBase):
         # The relation is ready if its egress has been allowed access and its
         # settings have been mirrored back, indicating they have been applied.
         app = {}
-        loc = {'egress-subnets': '127.0.0.0/24'}
-        rel = {'allowed-subnets': '127.0.0.0/24'}
-        for k in ['database', 'roles', 'extensions']:
-            with self.subTest(f'{k} match'):
+        loc = {"egress-subnets": "127.0.0.0/24"}
+        rel = {"allowed-subnets": "127.0.0.0/24"}
+        for k in ["database", "roles", "extensions"]:
+            with self.subTest(f"{k} match"):
                 # Requested setting should be available in application
                 # shared data. This could be leadership data or a peer
                 # relation application databag.
-                app[k] = 'value'
+                app[k] = "value"
                 self.assertFalse(client._is_ready(self.log, app, loc, rel))
-                rel[k] = 'value'
+                rel[k] = "value"
                 self.assertTrue(client._is_ready(self.log, app, loc, rel))
 
 
 class TestPostgreSQLRelationEvent(TestPGSQLBase):
-
     @patch("pgsql.client._master")
     def test_master(self, master):
         c = "host=master dbname=foo"
