@@ -449,3 +449,13 @@ class TestPostgreSQLRelationEvent(TestPGSQLBase):
         # Only the leader can set the property
         with self.assertRaises(ops.model.RelationDataError):
             ev.extensions = ["bar"]
+
+    def test_snapshot_and_restore(self):
+        # The snapshot and restore methods provide the interface used
+        # by the Operator Framework to serialize objects. In particular,
+        # it is how our event gets stored when the charm defers it.
+        org = self.ev
+        self.harness.framework.save_snapshot(org)
+        new = self.harness.framework.load_snapshot(org.handle)
+        self.assertEqual(org._local_unit, new._local_unit)  # PostgreSQLRelationEvent attribute
+        self.assertIs(org.app, new.app)  # RelationEvent parent class attribute
