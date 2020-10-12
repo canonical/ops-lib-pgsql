@@ -370,7 +370,7 @@ class PostgreSQLClient(ops.framework.Object):
         relid = rel.id
 
         prev_master = self._state.rels.get(relid, {}).get("master", None)
-        prev_standbys = self._state.rels.get(relid, {}).get("standbys", [])
+        prev_standbys = self._state.rels.get(relid, {}).get("standbys", []) or []
         new_master = _master(self.log, rel, self.model.unit)
         new_standbys = _standbys(self.log, rel, self.model.unit)
 
@@ -403,10 +403,10 @@ class PostgreSQLClient(ops.framework.Object):
             self.on.standby_changed.emit(**kwargs)
             database_changed = True
 
-        if prev_standbys != [] and new_standbys == []:
-            self.log.info("emitting standby_gone event for relation %r", event.relation.id)
-            self.on.standby_gone.emit(**kwargs)
-            database_gone = True
+            if set(new_standbys).issubset(set(prev_standbys)):
+                self.log.info("emitting standby_gone event for relation %r", event.relation.id)
+                self.on.standby_gone.emit(**kwargs)
+                database_gone = True
 
         if database_available:
             self.log.info("emitting database_available event for relation %r", event.relation.id)

@@ -20,3 +20,6 @@ test:
 
 lint:
 	tox -e lint
+
+clean:
+	rm -rf .tox
