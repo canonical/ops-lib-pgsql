@@ -18,5 +18,8 @@
 test:
 	tox
 
+coverage:
+	tox -e coverage
+
 lint:
 	tox -e lint
