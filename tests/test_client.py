@@ -41,6 +41,7 @@ class Charm(ops.charm.CharmBase):
         for event_name in self.db.on.events().keys():
             setattr(self, f"{event_name}_event", None)
             setattr(self, f"{event_name}_called", False)
+            setattr(self, f"{event_name}_count", 0)
 
     def on_event(self, event):
         # We can't pass in the name, because the Framework insists on
@@ -48,8 +49,12 @@ class Charm(ops.charm.CharmBase):
         # wrappers. So reverse engineer the event name from the class name.
         # Which works for the events we care about.
         event_name = re.sub(r"([A-Z]+)", r"_\1", event.__class__.__name__).lower()[1:-6]
+        # Store the event and set a flag, so that tests can tell
+        # what has happened.
         setattr(self, f"{event_name}_event", event)
         setattr(self, f"{event_name}_called", True)
+        count = getattr(self, f"{event_name}_count")
+        setattr(self, f"{event_name}_count", count + 1)
 
 
 class TestPGSQLBase(unittest.TestCase):
@@ -495,6 +500,8 @@ class TestPostgreSQLClient(TestPGSQLBase):
             is_set = getattr(self.charm, f"{n}_event") is not None
             if n in event_names:
                 self.assertTrue(is_set, f"{n}_event should be set")
+                count = getattr(self.charm, f"{n}_count")
+                self.assertEqual(count, 1, f"{n}_event was emitted {count} times, expected 1")
             else:
                 self.assertFalse(is_set, f"{n}_event should not be set")
 
@@ -684,3 +691,60 @@ class TestPostgreSQLClient(TestPGSQLBase):
                 ev = getattr(self.charm, f"{ev_name}_event")
                 self.assertIsNone(ev.master)
                 self.assertEqual(ev.standbys, [])
+
+    def test_relation_joined(self):
+        # The DatabaseRelationJoined event is emitted when the
+        # relation is joined, at the same time as the standard
+        # Operator Framework relation joined event for the relation.
+        # The DatabaseRelationJoined event is more useful though,
+        # providing the necessary methods to configure the PostgreSQL
+        # relation. The DatabaseRelationJoined event has already been
+        # fired when the test harness was initialized.
+        self.assert_only_events('database_relation_joined')
+
+    def test_relation_broken(self):
+        # Departing the relation triggers the DatabaseRelationBroken
+        # event, which is probably only useful for updating the
+        # Charm's workload status.
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events('database_relation_broken')
+
+    def test_relation_broken_master(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_master(ConnectionString("dbname=master"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            'database_relation_broken', 'master_changed', 'database_changed', 'master_gone', 'database_gone'
+        )
+
+    def test_relation_broken_standby(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_standbys(ConnectionString("dbname=standby"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            'database_relation_broken', 'standby_changed', 'database_changed', 'standby_gone', 'database_gone'
+        )
+
+    def test_relation_broken_full(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_dbs(ConnectionString("dbname=master"), ConnectionString("dbname=standby"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            'database_relation_broken',
+            'master_changed',
+            'standby_changed',
+            'database_changed',
+            'master_gone',
+            'standby_gone',
+            'database_gone',
+        )
