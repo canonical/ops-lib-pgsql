@@ -357,9 +357,12 @@ class PostgreSQLClient(ops.framework.Object):
     def _on_joined(self, event: ops.charm.RelationEvent) -> None:
         self.log.debug("_on_joined for relation %r", event.relation.id)
         self._mirror_appdata()  # PostgreSQL charm backwards compatibility
-        self.log.info("emitting database_relation_joined event for relation %r", event.relation.id)
-        self.on.database_relation_joined.emit(**self._db_event_args(event))
-        self._state.rels[event.relation.id] = dict(master=None, standbys=None)
+        if event.relation.id in self._state.rels:
+            self.log.debug("database_relation_joined event already emitted for relation %r", event.relation.id)
+        else:
+            self.log.info("emitting database_relation_joined event for relation %r", event.relation.id)
+            self.on.database_relation_joined.emit(**self._db_event_args(event))
+            self._state.rels[event.relation.id] = dict(master=None, standbys=None)
 
     def _on_changed(self, event: ops.charm.RelationEvent) -> None:
         self.log.debug("_on_changed for relation %r", event.relation.id)
