@@ -137,7 +137,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertIsNone(client._master(self.log, self.relation, self.local_unit))
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -151,7 +154,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._master(self.log, self.relation, self.local_unit), rd["master"])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -191,7 +197,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), [])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -205,7 +214,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), standbys)
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -510,7 +522,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # MasterAvailableEvent, DatabaseAvailableEvent,
         # MasterChangedEvent and DatabaseChangedEvent are emitted.
         self.charm.reset()
-        ev_names = ['master_available', 'database_available', 'master_changed', 'database_changed']
+        ev_names = ["master_available", "database_available", "master_changed", "database_changed"]
 
         master_c = ConnectionString("dbname=master")
         self.set_master(master_c)
@@ -528,7 +540,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # StandbyAvailableEvent, DatabaseAvailableEvent,
         # StandbyChangedEvent and DatabaseChangedEvent are emitted.
         self.charm.reset()
-        ev_names = ['standby_available', 'database_available', 'standby_changed', 'database_changed']
+        ev_names = ["standby_available", "database_available", "standby_changed", "database_changed"]
 
         standby_c = ConnectionString("dbname=standby")
         self.set_standbys(standby_c)
@@ -546,12 +558,12 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # [...]Available events are emitted.
         self.charm.reset()
         ev_names = [
-            'master_available',
-            'standby_available',
-            'database_available',
+            "master_available",
+            "standby_available",
+            "database_available",
             "master_changed",
-            'standby_changed',
-            'database_changed',
+            "standby_changed",
+            "database_changed",
         ]
 
         master_c = ConnectionString("dbname=master")
@@ -575,7 +587,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         standby_c = ConnectionString("dbname=standby")
         self.set_dbs(ConnectionString("dbname=org_master"), standby_c)
         self.charm.reset()
-        ev_names = ['master_changed', 'database_changed']
+        ev_names = ["master_changed", "database_changed"]
 
         self.set_master(master_c)
 
@@ -594,7 +606,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         standby_c = ConnectionString("dbname=standby")
         self.set_dbs(master_c, ConnectionString("dbname=org_standby"))
         self.charm.reset()
-        ev_names = ['standby_changed', 'database_changed']
+        ev_names = ["standby_changed", "database_changed"]
 
         self.set_standbys(standby_c)
 
@@ -611,7 +623,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # all the [...]ChangedEvents are emitted.
         self.set_dbs(ConnectionString("dbname=org_master"), ConnectionString("dbname=org_standby"))
         self.charm.reset()
-        ev_names = ['master_changed', 'standby_changed', 'database_changed']
+        ev_names = ["master_changed", "standby_changed", "database_changed"]
 
         master_c = ConnectionString("dbname=master")
         standby_c = ConnectionString("dbname=standby")
@@ -633,7 +645,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         standby_c = ConnectionString("dbname=standby")
         self.set_dbs(master_c, standby_c)
         self.charm.reset()
-        ev_names = ['master_gone', 'database_gone', 'master_changed', 'database_changed']
+        ev_names = ["master_gone", "database_gone", "master_changed", "database_changed"]
 
         self.set_master(None)
 
@@ -653,7 +665,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         standby_c = ConnectionString("dbname=standby")
         self.set_dbs(master_c, standby_c, ConnectionString("dbname=doomed_standby"))
         self.charm.reset()
-        ev_names = ['standby_gone', 'database_gone', 'standby_changed', 'database_changed']
+        ev_names = ["standby_gone", "database_gone", "standby_changed", "database_changed"]
 
         self.set_standbys(standby_c)
 
@@ -673,12 +685,12 @@ class TestPostgreSQLClient(TestPGSQLBase):
         self.set_dbs(master_c, standby_c)
         self.charm.reset()
         ev_names = [
-            'master_gone',
-            'standby_gone',
-            'database_gone',
-            'master_changed',
-            'standby_changed',
-            'database_changed',
+            "master_gone",
+            "standby_gone",
+            "database_gone",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
         ]
 
         # No longer providing the requested database, no longer ready.
@@ -700,7 +712,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # providing the necessary methods to configure the PostgreSQL
         # relation. The DatabaseRelationJoined event has already been
         # fired when the test harness was initialized.
-        self.assert_only_events('database_relation_joined')
+        self.assert_only_events("database_relation_joined")
 
     def test_relation_broken(self):
         # Departing the relation triggers the DatabaseRelationBroken
@@ -708,7 +720,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # Charm's workload status.
         self.charm.reset()
         self.charm.on.db_relation_broken.emit(self.relation)
-        self.assert_only_events('database_relation_broken')
+        self.assert_only_events("database_relation_broken")
 
     def test_relation_broken_master(self):
         # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
@@ -718,7 +730,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         self.charm.reset()
         self.charm.on.db_relation_broken.emit(self.relation)
         self.assert_only_events(
-            'database_relation_broken', 'master_changed', 'database_changed', 'master_gone', 'database_gone'
+            "database_relation_broken", "master_changed", "database_changed", "master_gone", "database_gone"
         )
 
     def test_relation_broken_standby(self):
@@ -729,7 +741,7 @@ class TestPostgreSQLClient(TestPGSQLBase):
         self.charm.reset()
         self.charm.on.db_relation_broken.emit(self.relation)
         self.assert_only_events(
-            'database_relation_broken', 'standby_changed', 'database_changed', 'standby_gone', 'database_gone'
+            "database_relation_broken", "standby_changed", "database_changed", "standby_gone", "database_gone"
         )
 
     def test_relation_broken_full(self):
@@ -740,11 +752,11 @@ class TestPostgreSQLClient(TestPGSQLBase):
         self.charm.reset()
         self.charm.on.db_relation_broken.emit(self.relation)
         self.assert_only_events(
-            'database_relation_broken',
-            'master_changed',
-            'standby_changed',
-            'database_changed',
-            'master_gone',
-            'standby_gone',
-            'database_gone',
+            "database_relation_broken",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+            "master_gone",
+            "standby_gone",
+            "database_gone",
         )
