@@ -103,7 +103,7 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         self.relation.data[self._local_unit.app]["database"] = dbname
         # Deprecated, per PostgreSQLClient._mirror_appdata()
         self.relation.data[self._local_unit]["database"] = dbname
-        # Inform our peers, since they can't read the appdata
+        # Inform our peers, since they can't read the appdata.
         d = _get_pgsql_leader_data()
         d.setdefault(self.relation.id, {})["database"] = dbname
         _set_pgsql_leader_data(d)
@@ -647,6 +647,17 @@ def _csplit(s) -> Iterable[str]:
 
 
 def _get_pgsql_leader_data() -> Dict[int, Dict[str, str]]:
+    '''Returns the dictionary stored # as yaml under LEADER_KEY in the Juju leadership settings.
+
+    The keys of this dict are relation ids, with the value another dict
+    containing the settings for that relation.
+
+    ie. leader_get()[LEADER_KEY][relation_id]['database'] is what the leader set the database
+    property on that relation to.
+
+    TODO: Replace with a better wrapper around leadership data, with the option of sharing
+    this data between peers using peer relation application data rather than leadership settings.
+    '''
     return yaml.safe_load(_leader_get(LEADER_KEY) or "{}")
 
 
