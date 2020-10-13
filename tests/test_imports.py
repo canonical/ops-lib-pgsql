@@ -46,7 +46,7 @@ class TestImports(unittest.TestCase):
         self.assertEqual(
             pgsql.LIBAPI,
             self.VERSION,
-            "LIBAPI in __init__.py does not match test version, got {pgsql.LIBAPI}, want {self.VERSION}",
+            f"LIBAPI in __init__.py does not match test version, got {pgsql.LIBAPI}, want {self.VERSION}",
         )
 
     def test_setup_version(self):
