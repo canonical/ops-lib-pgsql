@@ -591,7 +591,7 @@ def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops
 
 def _is_ready(
     log: logging.Logger,
-    appdata: Mapping,
+    appdata: Mapping,  # peer-shared data; leadership data or peer relation app data
     locdata: ops.model.RelationData,
     reldata: ops.model.RelationData,
 ) -> bool:
