@@ -450,6 +450,20 @@ class TestPostgreSQLRelationEvent(TestPGSQLBase):
         with self.assertRaises(ops.model.RelationDataError):
             ev.extensions = ["bar"]
 
+    def test_version(self):
+        # No version provided, ev.version returns None
+        self.assertIsNone(self.ev.version)
+
+        # If the version is published on unit relation data, it is
+        # returned. This is the legacy protocol.
+        self.harness.update_relation_data(self.relation_id, self.ev.unit.name, {"version": "9.5"})
+        self.assertEqual(self.ev.version, "9.5")
+
+        # If the version is published on the app relation data, it is
+        # returned, overriding any value published on the unit relation data.
+        self.harness.update_relation_data(self.relation_id, self.remote_app.name, {"version": "12"})
+        self.assertEqual(self.ev.version, "12")
+
     def test_snapshot_and_restore(self):
         # The snapshot and restore methods provide the interface used
         # by the Operator Framework to serialize objects. In particular,
