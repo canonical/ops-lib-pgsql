@@ -31,11 +31,19 @@ class Charm(ops.charm.CharmBase):
         super().__init__(*args, **kw)
         self.db = client.PostgreSQLClient(self, "db")
         self.framework.observe(self.db.on.database_relation_joined, self.on_database_relation_joined)
+        self.framework.observe(self.db.on.database_relation_joined, self.on_database_relation_changed)
 
+    database_relation_event = None  # The most recent event
     database_relation_joined_event = None
+    database_relation_changed_event = None
 
     def on_database_relation_joined(self, ev):
         self.database_relation_joined_event = ev
+        self.database_relation_event = ev
+
+    def on_database_relation_changed(self, ev):
+        self.database_relation_changed_event = ev
+        self.database_relation_event = ev
 
 
 class TestPGSQLBase(unittest.TestCase):
@@ -298,3 +306,156 @@ class TestPostgreSQLRelationEvent(TestPGSQLBase):
         standbys.return_value = [c1, c2]
         self.assertEqual(self.ev.standbys, [ConnectionString(c1), ConnectionString(c2)])
         standbys.assert_called_once_with(self.ev.log, self.relation, self.local_unit)
+
+    def test_database(self):
+        ev = self.ev
+        self.harness.set_leader(True)
+
+        self.assertIsNone(ev.database)
+
+        # Leader can change the database
+        ev.database = "foo"
+        self.assertEqual(ev.database, "foo")
+
+        # It gets stored in leadership settings, where peers can find
+        # it, allowing non-leaders to know what database name was
+        # requested.
+        self.assertIn(self.relation.id, self.leadership_data)
+        self.assertIn("database", self.leadership_data[self.relation.id])
+        self.assertEqual(self.leadership_data[self.relation.id]["database"], "foo")
+
+        # It gets stored in application relation data, informing the server.
+        self.assertIn("database", self.relation.data[self.local_unit.app])
+        self.assertEqual(self.relation.data[self.local_unit.app]["database"], "foo")
+
+        # It gets mirrored to unit relation data, for backwards with older servers.
+        self.assertIn("database", self.relation.data[self.local_unit])
+        self.assertEqual(self.relation.data[self.local_unit]["database"], "foo")
+
+        ev.database = None
+        self.assertIsNone(ev.database)
+        self.assertNotIn("database", self.relation.data[self.local_unit.app])
+        self.assertNotIn("database", self.relation.data[self.local_unit])
+
+    def test_database_non_leader(self):
+        ev = self.ev
+        self.harness.set_leader(False)
+
+        # Non leaders can read the requested database name, pulling it
+        # from leadership settings.
+        self.assertIsNone(ev.database)
+        self.leadership_data[self.relation.id] = {"database": "foo"}
+        self.assertEqual(ev.database, "foo")
+
+        # Only the leader can set the property
+        with self.assertRaises(ops.model.RelationDataError):
+            ev.database = "bar"
+
+    def test_roles(self):
+        ev = self.ev
+        self.harness.set_leader(True)
+
+        self.assertEqual(ev.roles, [])
+
+        # Leader can request database roles to be automatically created
+        ev.roles = {"foo", "bar"}  # unsorted
+        self.assertEqual(ev.roles, ["bar", "foo"])  # sorted
+
+        # It gets stored in leadership settings, where peers can find
+        # it, allowing non-leaders to know what roles where requested.
+        self.assertIn(self.relation.id, self.leadership_data)
+        self.assertIn("roles", self.leadership_data[self.relation.id])
+        self.assertEqual(self.leadership_data[self.relation.id]["roles"], "bar,foo")
+
+        # It gets stored in application relation data, informing the server.
+        self.assertIn("roles", self.relation.data[self.local_unit.app])
+        self.assertEqual(self.relation.data[self.local_unit.app]["roles"], "bar,foo")
+
+        # It gets mirrored to unit relation data, for backwards with older servers.
+        self.assertIn("roles", self.relation.data[self.local_unit])
+        self.assertEqual(self.relation.data[self.local_unit]["roles"], "bar,foo")
+
+        ev.roles = []
+        self.assertEqual(ev.roles, [])
+        self.assertNotIn("roles", self.relation.data[self.local_unit.app])
+        self.assertNotIn("roles", self.relation.data[self.local_unit])
+
+        ev.roles = None
+        self.assertEqual(ev.roles, [])
+        self.assertNotIn("roles", self.relation.data[self.local_unit.app])
+        self.assertNotIn("roles", self.relation.data[self.local_unit])
+
+    def test_roles_non_leader(self):
+        ev = self.ev
+        self.harness.set_leader(False)
+
+        # Non leaders can read the requested roles, pulling from
+        # leadership settings, which allows them to tell when the
+        # server has created them.
+        self.assertEqual(ev.roles, [])
+        self.leadership_data[self.relation.id] = {"roles": "bar,foo"}
+        self.assertEqual(ev.roles, ["bar", "foo"])
+
+        # Only the leader can set the property
+        with self.assertRaises(ops.model.RelationDataError):
+            ev.roles = ["bar"]
+
+    def test_extensions(self):
+        ev = self.ev
+        self.harness.set_leader(True)
+
+        self.assertEqual(ev.extensions, [])
+
+        # Leader can request database extensions to be installed into
+        # the provided database.
+        ev.extensions = {"foo", "bar"}  # unsorted
+        self.assertEqual(ev.extensions, ["bar", "foo"])  # sorted
+
+        # It gets stored in leadership settings, where peers can find
+        # it, allowing non-leaders to know what extensions where requested.
+        self.assertIn(self.relation.id, self.leadership_data)
+        self.assertIn("extensions", self.leadership_data[self.relation.id])
+        self.assertEqual(self.leadership_data[self.relation.id]["extensions"], "bar,foo")
+
+        # It gets stored in application relation data, informing the server.
+        self.assertIn("extensions", self.relation.data[self.local_unit.app])
+        self.assertEqual(self.relation.data[self.local_unit.app]["extensions"], "bar,foo")
+
+        # It gets mirrored to unit relation data, for backwards with older servers.
+        self.assertIn("extensions", self.relation.data[self.local_unit])
+        self.assertEqual(self.relation.data[self.local_unit]["extensions"], "bar,foo")
+
+        ev.extensions = None
+        self.assertEqual(ev.roles, [])
+        self.assertNotIn("extensions", self.relation.data[self.local_unit.app])
+        self.assertNotIn("extensions", self.relation.data[self.local_unit])
+
+        ev.extensions = []
+        self.assertEqual(ev.roles, [])
+        self.assertNotIn("extensions", self.relation.data[self.local_unit.app])
+        self.assertNotIn("extensions", self.relation.data[self.local_unit])
+
+    def test_extensions_non_leader(self):
+        ev = self.ev
+        self.harness.set_leader(False)
+
+        # Non leaders can read the requested roles, pulling from
+        # leadership settings, which allows them to tell when the
+        # server has created them.
+        self.assertEqual(ev.extensions, [])
+        self.leadership_data[self.relation.id] = {"extensions": "bar,foo"}
+        self.assertEqual(ev.extensions, ["bar", "foo"])
+
+        # Only the leader can set the property
+        with self.assertRaises(ops.model.RelationDataError):
+            ev.extensions = ["bar"]
+
+    def test_snapshot_and_restore(self):
+        # The snapshot and restore methods provide the interface used
+        # by the Operator Framework to serialize objects. In particular,
+        # it is how our event gets stored when the charm defers it.
+        org = self.ev
+        self.harness.framework.save_snapshot(org)
+        new = self.harness.framework.load_snapshot(org.handle)
+        self.assertEqual(org._local_unit, new._local_unit)  # PostgreSQLRelationEvent attribute
+        self.assertIs(org.app, new.app)  # RelationEvent parent class attribute
