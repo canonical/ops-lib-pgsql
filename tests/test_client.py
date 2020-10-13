@@ -137,10 +137,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertIsNone(client._master(self.log, self.relation, self.local_unit))
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -154,10 +151,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._master(self.log, self.relation, self.local_unit), rd["master"])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -197,10 +191,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), [])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -214,10 +205,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), standbys)
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -637,13 +625,12 @@ class TestPostgreSQLClient(TestPGSQLBase):
                 self.assertEqual(ev.master, master_c)
                 self.assertEqual(ev.standbys, [standby_c])
 
-    def test_master_gone(self):
-        # When the master connection string disappears, all of
-        # MasterGoneEvent, MasterChangedEvent, DatabaseGoneEvent
-        # and DatabaseChangedEvent are emitted.
+    def test_master_gone_no_standbys(self):
+        # When the master connection string disappears, and there are
+        # no standbys, all of MasterGoneEvent, MasterChangedEvent,
+        # DatabaseGoneEvent and DatabaseChangedEvent are emitted.
         master_c = ConnectionString("dbname=master")
-        standby_c = ConnectionString("dbname=standby")
-        self.set_dbs(master_c, standby_c)
+        self.set_master(master_c)
         self.charm.reset()
         ev_names = ["master_gone", "database_gone", "master_changed", "database_changed"]
 
@@ -655,19 +642,61 @@ class TestPostgreSQLClient(TestPGSQLBase):
             with self.subTest(f"master gone triggers {ev_name}"):
                 ev = getattr(self.charm, f"{ev_name}_event")
                 self.assertIsNone(ev.master)
-                self.assertEqual(ev.standbys, [standby_c])
+                self.assertEqual(ev.standbys, [])
 
-    def test_standby_gone(self):
-        # When a standby connection string disappears, all of
-        # StandbyGoneEvent, StrandbyChangedEvent, DatabaseGoneEvent
-        # and DatabaseChangedEvent are emitted.
+    def test_master_gone_standbys_remain(self):
+        # When the master connection string disappears, but standbys
+        # remain, all of MasterGoneEvent, MasterChangedEvent and
+        # DatabaseChangedEvent are emitted. DatabaseGoneEvent is not
+        # emitted.
         master_c = ConnectionString("dbname=master")
         standby_c = ConnectionString("dbname=standby")
-        self.set_dbs(master_c, standby_c, ConnectionString("dbname=doomed_standby"))
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = ["master_gone", "master_changed", "database_changed"]
+
+        self.set_master(None)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master)
+                self.assertEqual(ev.standbys, [standby_c])
+
+    def test_standbys_gone_no_master(self):
+        # When a standby connection string disappears, but the master
+        # remains, all of StandbyGoneEvent, StrandbyChangedEvent,
+        # and DatabaseChangedEvent are emitted. DatabaseGoneEvent is
+        # not emitted.
+        standby_c = ConnectionString("dbname=standby")
+        self.set_standbys(standby_c)
         self.charm.reset()
         ev_names = ["standby_gone", "database_gone", "standby_changed", "database_changed"]
 
-        self.set_standbys(standby_c)
+        self.set_standbys()
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master, None)
+                self.assertEqual(ev.standbys, [])
+
+    def test_standbys_gone_master_remains(self):
+        # When a standby connection string disappears, but the master
+        # remains, all of StandbyGoneEvent, StrandbyChangedEvent,
+        # and DatabaseChangedEvent are emitted. DatabaseGoneEvent is
+        # not emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = ["standby_gone", "standby_changed", "database_changed"]
+
+        self.set_standbys()
 
         self.assert_only_events(*ev_names)
 
@@ -675,7 +704,35 @@ class TestPostgreSQLClient(TestPGSQLBase):
             with self.subTest(f"standby gone triggers {ev_name}"):
                 ev = getattr(self.charm, f"{ev_name}_event")
                 self.assertEqual(ev.master, master_c)
-                self.assertEqual(ev.standbys, [standby_c])
+                self.assertEqual(ev.standbys, [])
+
+    def test_standbys_and_master_gone(self):
+        # When both the master and standbys disappear, all of
+        # MasterGoneEvent, StandbyGoneEvent, DatabaseGoneEvent,
+        # MasterChangedEvent, StandbyChangedEvent and
+        # DatabaseChangedEvent are emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = [
+            "master_gone",
+            "standby_gone",
+            "database_gone",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+        ]
+
+        self.set_dbs(None)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, None)
+                self.assertEqual(ev.standbys, [])
 
     def test_not_ready(self):
         # When the remote DB stops being ready for some reason,
