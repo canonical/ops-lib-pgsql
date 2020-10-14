@@ -186,6 +186,12 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
         _set_pgsql_leader_data(d)
         self.log.debug("extensions set to %s on relation %s", sext, self.relation.id)
 
+    @property
+    def version(self) -> str:
+        """Return the PostgreSQL version provided on this relation."""
+        # Prefer version information from remote app relation data, fall back to remote unit relation data.
+        return self.relation.data[self.app].get("version", None) or self.relation.data[self.unit].get("version", None)
+
     def snapshot(self):
         s = [
             super().snapshot(),
