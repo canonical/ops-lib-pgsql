@@ -16,44 +16,36 @@
 # <http://www.gnu.org/licenses/>.
 
 import os.path
-import re
+import subprocess
+import sys
 import unittest
 
 import ops.lib
 
+import pgsql
+
 
 class TestImports(unittest.TestCase):
-    VERSION = 1
-
     def test_python_standard(self):
         # Test standard Python import mechanism.
-        import pgsql
-
         pgsql.ConnectionString
         pgsql.MasterAvailableEvent
         pgsql.PostgreSQLClient
 
     def test_ops_lib_use(self):
         # Test recommended ops.lib.use import mechanism.
-        pgsql = ops.lib.use("pgsql", self.VERSION, "postgresql-charmers@lists.launchpad.net")
-        pgsql.ConnectionString
-        pgsql.MasterAvailableEvent
-        pgsql.PostgreSQLClient
-
-    def test_protocol_version(self):
-        import pgsql
-
-        self.assertEqual(
-            pgsql.LIBAPI,
-            self.VERSION,
-            f"LIBAPI in __init__.py does not match test version, got {pgsql.LIBAPI}, want {self.VERSION}",
-        )
+        _pgsql = ops.lib.use("pgsql", pgsql.LIBAPI, "postgresql-charmers@lists.launchpad.net")
+        _pgsql.ConnectionString is pgsql.ConnectionString
+        _pgsql.MasterAvailableEvent is pgsql.MasterAvailableEvent
+        _pgsql.PostgreSQLClient is pgsql.PostgreSQLClient
 
     def test_setup_version(self):
-        with open(os.path.join(os.path.dirname(__file__), os.pardir, "setup.py"), "r") as s:
-            m = re.search(r"""version\s*=\s*"(\d+)\.""", s.read())
-        self.assertIsNotNone(m, "version not found in setup.py")
-        v = int(m.group(1))
+        setup_py = os.path.join(os.path.dirname(__file__), os.pardir, "setup.py")
+        cmd = [sys.executable, setup_py, "--version"]
+        ver = subprocess.check_output(cmd, universal_newlines=True).strip()
+
         self.assertEqual(
-            v, self.VERSION, f"version in setup.py does not match test version, got {v}, want {self.VERSION}"
+            ver,
+            f"{pgsql.LIBAPI}.{pgsql.LIBPATCH}",
+            "version reported by setup.py does not match ops.lib version in pgsql/__init__.py",
         )

@@ -25,4 +25,4 @@ from .connstr import ConnectionString  # noqa
 LIBNAME = "pgsql"
 LIBAUTHOR = "postgresql-charmers@lists.launchpad.net"
 LIBAPI = 1
-LIBPATCH = 0  # Unused? Pull latest version from the stable branch or suffer needlessly
+LIBPATCH = 1

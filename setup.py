@@ -15,18 +15,34 @@
 # License along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 
+import os.path
+import re
 import setuptools
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+
+def get_long_description():
+    with open("README.md", "r") as fh:
+        return fh.read()
+
+
+def get_version():
+    with open(os.path.join("pgsql", "__init__.py"), "r") as fh:
+        pkg = fh.read()
+
+    LIBAPI = int(re.search(r"""(?m)^LIBAPI\s*=\s*(\d+)""", pkg).group(1))
+    LIBPATCH = int(re.search(r"""(?m)^LIBPATCH\s*=\s*(\d+)""", pkg).group(1))
+    return f"{LIBAPI}.{LIBPATCH}"
+
 
 setuptools.setup(
     name="ops-lib-pgsql",
-    version="1.0.1",
-    author="PostgreSQL Charmers",
-    author_email="postgresql-charmers@lists.launchpad.net",
+    version=get_version(),
+    author="Stuart Bishop",
+    author_email="stuart.bishop@canonical.com",
+    maintainer="PostgreSQL Charmers",
+    maintainer_email="postgresql-charmers@lists.launchpad.net",
     description="PostgreSQL database relation for Juju Operator Framework Charms",
-    long_description=long_description,
+    long_description=get_long_description(),
     long_description_content_type="text/markdown",
     url="https://github.com/canonical/ops-lib-pgsql",
     packages=["pgsql", "pgsql.opslib.pgsql"],
