@@ -19,7 +19,7 @@
 PostgreSQL relation interface for the Operator Framework.
 """
 from .client import *  # noqa
-from .connstr import ConnectionString  # noqa
+from pgconnstr import ConnectionString  # noqa
 
 
 LIBNAME = "pgsql"

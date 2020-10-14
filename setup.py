@@ -62,5 +62,5 @@ setuptools.setup(
         "Juju Operator Framework": "https://pypi.org/project/ops/",
     },
     python_requires=">=3.6",
-    install_requires=["ops >= 0.8.0", "PyYAML"],
+    install_requires=["ops >= 0.8.0", "PyYAML", "pgconnstr"],
 )

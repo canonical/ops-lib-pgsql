@@ -19,12 +19,11 @@ import logging
 import subprocess
 from typing import Dict, Iterable, List, Mapping
 
+from pgconnstr import ConnectionString
 import ops.charm
 import ops.framework
 import ops.model
 import yaml
-
-from .connstr import ConnectionString
 
 
 __all__ = [
