@@ -27,3 +27,12 @@ jobs:
       run: tox -e checklint
     - name: Tests
       run: tox -e py
+    - name: Coverage
+      if: ${{ matrix.python-version == '3.8' }}
+      run: tox -e coverage
+    - name: Upload coverage report
+      if: ${{ matrix.python-version == '3.8' }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: Coverage
+        path: coverage
