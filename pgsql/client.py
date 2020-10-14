@@ -653,7 +653,7 @@ def _csplit(s) -> Iterable[str]:
 
 
 def _get_pgsql_leader_data() -> Dict[int, Dict[str, str]]:
-    '''Returns the dictionary stored # as yaml under LEADER_KEY in the Juju leadership settings.
+    """Returns the dictionary stored as yaml under LEADER_KEY in the Juju leadership settings.
 
     The keys of this dict are relation ids, with the value another dict
     containing the settings for that relation.
@@ -663,7 +663,7 @@ def _get_pgsql_leader_data() -> Dict[int, Dict[str, str]]:
 
     TODO: Replace with a better wrapper around leadership data, with the option of sharing
     this data between peers using peer relation application data rather than leadership settings.
-    '''
+    """
     return yaml.safe_load(_leader_get(LEADER_KEY) or "{}")
 
 
