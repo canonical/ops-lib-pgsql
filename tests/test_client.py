@@ -137,7 +137,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertIsNone(client._master(self.log, self.relation, self.local_unit))
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -151,7 +154,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._master(self.log, self.relation, self.local_unit), rd["master"])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -191,7 +197,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), [])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -205,7 +214,10 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), standbys)
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
+            self.log,
+            self.leadership_data,
+            self.relation.data[self.local_unit],
+            self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
