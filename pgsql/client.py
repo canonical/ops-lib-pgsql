@@ -22,7 +22,7 @@ from typing import Dict, Iterable, List, Mapping
 from pgconnstr import ConnectionString
 import ops.charm
 import ops.framework
-import ops.model
+from ops.model import Application, Relation, RelationData, Unit
 import yaml
 
 
@@ -51,10 +51,10 @@ class PostgreSQLRelationEvent(ops.charm.RelationEvent):
     def __init__(
         self,
         handle,
-        relation: ops.model.Relation,
-        app: ops.model.Application,
-        unit: ops.model.Unit,
-        local_unit: ops.model.Unit,
+        relation: Relation,
+        app: Application,
+        unit: Unit,
+        local_unit: Unit,
     ):
         super().__init__(handle, relation, app, unit)
         self._local_unit = local_unit
@@ -572,7 +572,7 @@ class PostgreSQLClient(ops.framework.Object):
             _set_pgsql_leader_data(new_lead_data)
 
 
-def _master(log: logging.Logger, relation: ops.model.Relation, local_unit: ops.model.Unit) -> str:
+def _master(log: logging.Logger, relation: Relation, local_unit: Unit) -> str:
     """The master database. None if there is currently no master."""
     # Per https://bugs.launchpad.net/juju/+bug/1869915, non-leaders
     # can't read application relation data and thus unable to tell
@@ -595,7 +595,7 @@ def _master(log: logging.Logger, relation: ops.model.Relation, local_unit: ops.m
     return None
 
 
-def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops.model.Unit) -> List[str]:
+def _standbys(log: logging.Logger, relation: Relation, local_unit: Unit) -> List[str]:
     """All hot standby databases (read only replicas)."""
     # Per https://bugs.launchpad.net/juju/+bug/1869915, non-leaders
     # can't read application relation data and thus unable to tell
@@ -619,8 +619,8 @@ def _standbys(log: logging.Logger, relation: ops.model.Relation, local_unit: ops
 def _is_ready(
     log: logging.Logger,
     appdata: Mapping,  # peer-shared data; leadership data or peer relation app data
-    locdata: ops.model.RelationData,
-    reldata: ops.model.RelationData,
+    locdata: RelationData,
+    reldata: RelationData,
 ) -> bool:
     # The relation is not ready for use if the server has not yet
     # mirrored relation config set by the client. This is how we
