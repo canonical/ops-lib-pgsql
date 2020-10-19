@@ -15,6 +15,7 @@
 # License along with this program.  If not, see
 # <http://www.gnu.org/licenses/>.
 
+import re
 from textwrap import dedent
 import unittest
 from unittest.mock import patch
@@ -30,20 +31,30 @@ class Charm(ops.charm.CharmBase):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self.db = client.PostgreSQLClient(self, "db")
-        self.framework.observe(self.db.on.database_relation_joined, self.on_database_relation_joined)
-        self.framework.observe(self.db.on.database_relation_joined, self.on_database_relation_changed)
 
-    database_relation_event = None  # The most recent event
-    database_relation_joined_event = None
-    database_relation_changed_event = None
+        for event in self.db.on.events().values():
+            self.framework.observe(event, self.on_event)
 
-    def on_database_relation_joined(self, ev):
-        self.database_relation_joined_event = ev
-        self.database_relation_event = ev
+        self.reset()
 
-    def on_database_relation_changed(self, ev):
-        self.database_relation_changed_event = ev
-        self.database_relation_event = ev
+    def reset(self):
+        for event_name in self.db.on.events().keys():
+            setattr(self, f"{event_name}_event", None)
+            setattr(self, f"{event_name}_called", False)
+            setattr(self, f"{event_name}_count", 0)
+
+    def on_event(self, event):
+        # We can't pass in the name, because the Framework insists on
+        # handlers being real methods and not for example functools.partial
+        # wrappers. So reverse engineer the event name from the class name.
+        # Which works for the events we care about.
+        event_name = re.sub(r"([A-Z]+)", r"_\1", event.__class__.__name__).lower()[1:-6]
+        # Store the event and set a flag, so that tests can tell
+        # what has happened.
+        setattr(self, f"{event_name}_event", event)
+        setattr(self, f"{event_name}_called", True)
+        count = getattr(self, f"{event_name}_count")
+        setattr(self, f"{event_name}_count", count + 1)
 
 
 class TestPGSQLBase(unittest.TestCase):
@@ -83,6 +94,7 @@ class TestPGSQLBase(unittest.TestCase):
         self.local_unit = self.harness.model.unit
         self.remote_app = self.ev.app
         self.remote_units = sorted((u for u in self.relation.units if u.app == self.remote_app), key=lambda x: x.name)
+        self.charm = self.harness.charm
 
 
 class TestPGSQLHarness(TestPGSQLBase):
@@ -125,10 +137,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertIsNone(client._master(self.log, self.relation, self.local_unit))
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -142,10 +151,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._master(self.log, self.relation, self.local_unit), rd["master"])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -185,10 +191,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), [])
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -202,10 +205,7 @@ class TestPGSQLHelpers(TestPGSQLBase):
         self.assertEqual(client._standbys(self.log, self.relation, self.local_unit), standbys)
         self.assertTrue(is_ready.called)
         is_ready.assert_called_once_with(
-            self.log,
-            self.leadership_data,
-            self.relation.data[self.local_unit],
-            self.relation.data[self.remote_app],
+            self.log, self.leadership_data, self.relation.data[self.local_unit], self.relation.data[self.remote_app],
         )
 
     @patch("pgsql.client._is_ready")
@@ -473,3 +473,361 @@ class TestPostgreSQLRelationEvent(TestPGSQLBase):
         new = self.harness.framework.load_snapshot(org.handle)
         self.assertEqual(org._local_unit, new._local_unit)  # PostgreSQLRelationEvent attribute
         self.assertIs(org.app, new.app)  # RelationEvent parent class attribute
+
+
+class TestPostgreSQLClient(TestPGSQLBase):
+    def setUp(self):
+        super().setUp()
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(True)
+            d = self.harness.get_relation_data(self.relation_id, self.local_unit.name)
+            d["egress-subnets"] = "127.1.2.3/24"
+            for ru in self.remote_unit_names:
+                d = self.harness.get_relation_data(self.relation_id, ru)
+                d["allowed-subnets"] = "127.1.2.3/24"
+
+    def set_master(self, master_connstr):
+        # Set the master, and don't touch the standbys.
+        self.harness.update_relation_data(self.relation_id, self.remote_app.name, {"master": str(master_connstr or "")})
+
+    def set_standbys(self, *standby_connstrs):
+        # Set the standbys, and don't touch the masters.
+        self.harness.update_relation_data(
+            self.relation_id, self.remote_app.name, {"standbys": "\n".join(str(c) for c in standby_connstrs)}
+        )
+
+    def set_dbs(self, master_connstr, *standby_connstrs):
+        # Set both the master and the standbys.
+        self.harness.update_relation_data(
+            self.relation_id,
+            self.remote_app.name,
+            {"master": str(master_connstr or ""), "standbys": "\n".join(str(c) for c in standby_connstrs)},
+        )
+
+    def assert_only_events(self, *event_names):
+        # Iterate over all events, ensuring only the listed ones
+        # have been set in our mock charm. We do this to ensure
+        # that not only are the events we expect have been emitted,
+        # but also importantly that events we *don't* expect have
+        # *not* been emitted.
+        for n in self.charm.db.on.events():
+            is_set = getattr(self.charm, f"{n}_event") is not None
+            if n in event_names:
+                self.assertTrue(is_set, f"{n}_event should be set")
+                count = getattr(self.charm, f"{n}_count")
+                self.assertEqual(count, 1, f"{n}_event was emitted {count} times, expected 1")
+            else:
+                self.assertFalse(is_set, f"{n}_event should not be set")
+
+    def test_master_available(self):
+        # When the master becomes available,
+        # MasterAvailableEvent, DatabaseAvailableEvent,
+        # MasterChangedEvent and DatabaseChangedEvent are emitted.
+        self.charm.reset()
+        ev_names = ["master_available", "database_available", "master_changed", "database_changed"]
+
+        master_c = ConnectionString("dbname=master")
+        self.set_master(master_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master available triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [])
+
+    def test_standby_available(self):
+        # When the standby becomes available,
+        # StandbyAvailableEvent, DatabaseAvailableEvent,
+        # StandbyChangedEvent and DatabaseChangedEvent are emitted.
+        self.charm.reset()
+        ev_names = ["standby_available", "database_available", "standby_changed", "database_changed"]
+
+        standby_c = ConnectionString("dbname=standby")
+        self.set_standbys(standby_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby available triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.standbys, [standby_c])
+                self.assertIsNone(ev.master)
+
+    def test_databases_available(self):
+        # When both master and standby become available, all the
+        # [...]Available events are emitted.
+        self.charm.reset()
+        ev_names = [
+            "master_available",
+            "standby_available",
+            "database_available",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+        ]
+
+        master_c = ConnectionString("dbname=master")
+        standby1_c = ConnectionString("dbname=standby1")
+        standby2_c = ConnectionString("dbname=standby2")
+
+        self.set_dbs(master_c, standby1_c, standby2_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master & standby available triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [standby1_c, standby2_c])
+
+    def test_master_changed(self):
+        # When the master connection string is changed,
+        # MasterChangedEvent and DatabaseChangedEvent are emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(ConnectionString("dbname=org_master"), standby_c)
+        self.charm.reset()
+        ev_names = ["master_changed", "database_changed"]
+
+        self.set_master(master_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master change triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [standby_c])
+
+    def test_standby_changed(self):
+        # When the master connection string is changed,
+        # MasterChangedEvent and DatabaseChangedEvent are emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, ConnectionString("dbname=org_standby"))
+        self.charm.reset()
+        ev_names = ["standby_changed", "database_changed"]
+
+        self.set_standbys(standby_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby change triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [standby_c])
+
+    def test_databases_changed(self):
+        # When the master and standby connection strings are changed,
+        # all the [...]ChangedEvents are emitted.
+        self.set_dbs(ConnectionString("dbname=org_master"), ConnectionString("dbname=org_standby"))
+        self.charm.reset()
+        ev_names = ["master_changed", "standby_changed", "database_changed"]
+
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby change triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [standby_c])
+
+    def test_master_gone_no_standbys(self):
+        # When the master connection string disappears, and there are
+        # no standbys, all of MasterGoneEvent, MasterChangedEvent,
+        # DatabaseGoneEvent and DatabaseChangedEvent are emitted.
+        master_c = ConnectionString("dbname=master")
+        self.set_master(master_c)
+        self.charm.reset()
+        ev_names = ["master_gone", "database_gone", "master_changed", "database_changed"]
+
+        self.set_master(None)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master)
+                self.assertEqual(ev.standbys, [])
+
+    def test_master_gone_standbys_remain(self):
+        # When the master connection string disappears, but standbys
+        # remain, all of MasterGoneEvent, MasterChangedEvent and
+        # DatabaseChangedEvent are emitted. DatabaseGoneEvent is not
+        # emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = ["master_gone", "master_changed", "database_changed"]
+
+        self.set_master(None)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"master gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master)
+                self.assertEqual(ev.standbys, [standby_c])
+
+    def test_standbys_gone_no_master(self):
+        # When a standby connection string disappears, but the master
+        # remains, all of StandbyGoneEvent, StrandbyChangedEvent,
+        # and DatabaseChangedEvent are emitted. DatabaseGoneEvent is
+        # not emitted.
+        standby_c = ConnectionString("dbname=standby")
+        self.set_standbys(standby_c)
+        self.charm.reset()
+        ev_names = ["standby_gone", "database_gone", "standby_changed", "database_changed"]
+
+        self.set_standbys()
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master, None)
+                self.assertEqual(ev.standbys, [])
+
+    def test_standbys_gone_master_remains(self):
+        # When a standby connection string disappears, but the master
+        # remains, all of StandbyGoneEvent, StrandbyChangedEvent,
+        # and DatabaseChangedEvent are emitted. DatabaseGoneEvent is
+        # not emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = ["standby_gone", "standby_changed", "database_changed"]
+
+        self.set_standbys()
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, master_c)
+                self.assertEqual(ev.standbys, [])
+
+    def test_standbys_and_master_gone(self):
+        # When both the master and standbys disappear, all of
+        # MasterGoneEvent, StandbyGoneEvent, DatabaseGoneEvent,
+        # MasterChangedEvent, StandbyChangedEvent and
+        # DatabaseChangedEvent are emitted.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = [
+            "master_gone",
+            "standby_gone",
+            "database_gone",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+        ]
+
+        self.set_dbs(None)
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"standby gone triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertEqual(ev.master, None)
+                self.assertEqual(ev.standbys, [])
+
+    def test_not_ready(self):
+        # When the remote DB stops being ready for some reason,
+        # it counts as gone.
+        master_c = ConnectionString("dbname=master")
+        standby_c = ConnectionString("dbname=standby")
+        self.set_dbs(master_c, standby_c)
+        self.charm.reset()
+        ev_names = [
+            "master_gone",
+            "standby_gone",
+            "database_gone",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+        ]
+
+        # No longer providing the requested database, no longer ready.
+        self.harness.update_relation_data(self.relation_id, self.remote_app.name, {"database": "foo"})
+
+        self.assert_only_events(*ev_names)
+
+        for ev_name in ev_names:
+            with self.subTest(f"unready relation triggers {ev_name}"):
+                ev = getattr(self.charm, f"{ev_name}_event")
+                self.assertIsNone(ev.master)
+                self.assertEqual(ev.standbys, [])
+
+    def test_relation_joined(self):
+        # The DatabaseRelationJoined event is emitted when the
+        # relation is joined, at the same time as the standard
+        # Operator Framework relation joined event for the relation.
+        # The DatabaseRelationJoined event is more useful though,
+        # providing the necessary methods to configure the PostgreSQL
+        # relation. The DatabaseRelationJoined event has already been
+        # fired when the test harness was initialized.
+        self.assert_only_events("database_relation_joined")
+
+    def test_relation_broken(self):
+        # Departing the relation triggers the DatabaseRelationBroken
+        # event, which is probably only useful for updating the
+        # Charm's workload status.
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events("database_relation_broken")
+
+    def test_relation_broken_master(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_master(ConnectionString("dbname=master"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            "database_relation_broken", "master_changed", "database_changed", "master_gone", "database_gone"
+        )
+
+    def test_relation_broken_standby(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_standbys(ConnectionString("dbname=standby"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            "database_relation_broken", "standby_changed", "database_changed", "standby_gone", "database_gone"
+        )
+
+    def test_relation_broken_full(self):
+        # MasterChanged, DatabaseChanged, MasterGone and DatabaseGone
+        # events are emitted if the master was available when the
+        # relation is lost.
+        self.set_dbs(ConnectionString("dbname=master"), ConnectionString("dbname=standby"))
+        self.charm.reset()
+        self.charm.on.db_relation_broken.emit(self.relation)
+        self.assert_only_events(
+            "database_relation_broken",
+            "master_changed",
+            "standby_changed",
+            "database_changed",
+            "master_gone",
+            "standby_gone",
+            "database_gone",
+        )

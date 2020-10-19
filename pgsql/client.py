@@ -362,9 +362,12 @@ class PostgreSQLClient(ops.framework.Object):
     def _on_joined(self, event: ops.charm.RelationEvent) -> None:
         self.log.debug("_on_joined for relation %r", event.relation.id)
         self._mirror_appdata()  # PostgreSQL charm backwards compatibility
-        self.log.info("emitting database_relation_joined event for relation %r", event.relation.id)
-        self.on.database_relation_joined.emit(**self._db_event_args(event))
-        self._state.rels[event.relation.id] = dict(master=None, standbys=None)
+        if event.relation.id in self._state.rels:
+            self.log.debug("database_relation_joined event already emitted for relation %r", event.relation.id)
+        else:
+            self.log.info("emitting database_relation_joined event for relation %r", event.relation.id)
+            self.on.database_relation_joined.emit(**self._db_event_args(event))
+            self._state.rels[event.relation.id] = dict(master=None, standbys=None)
 
     def _on_changed(self, event: ops.charm.RelationEvent) -> None:
         self.log.debug("_on_changed for relation %r", event.relation.id)
@@ -375,7 +378,7 @@ class PostgreSQLClient(ops.framework.Object):
         relid = rel.id
 
         prev_master = self._state.rels.get(relid, {}).get("master", None)
-        prev_standbys = self._state.rels.get(relid, {}).get("standbys", [])
+        prev_standbys = self._state.rels.get(relid, {}).get("standbys", []) or []
         new_master = _master(self.log, rel, self.model.unit)
         new_standbys = _standbys(self.log, rel, self.model.unit)
 
@@ -421,7 +424,7 @@ class PostgreSQLClient(ops.framework.Object):
             self.log.info("emitting database_changed event for relation %r", event.relation.id)
             self.on.database_changed.emit(**kwargs)
 
-        if (prev_master is not None or prev_standbys != []) and database_gone:
+        if new_master is None and new_standbys == [] and database_gone:
             self.log.info("emitting database_gone event for relation %r", event.relation.id)
             self.on.database_gone.emit(**kwargs)
 
