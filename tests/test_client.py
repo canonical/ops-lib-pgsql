@@ -23,6 +23,7 @@ from unittest.mock import patch
 import ops.charm
 import ops.lib
 import ops.testing
+import yaml
 
 from pgsql import client, ConnectionString
 
@@ -843,3 +844,43 @@ class TestPostgreSQLClient(TestPGSQLBase):
             "standby_gone",
             "database_gone",
         )
+
+
+class TestLeadershipWrappers(unittest.TestCase):
+    @patch("subprocess.check_output")
+    def test_leader_get(self, check_output):
+        expected = "some\ndata\N{TRADE MARK SIGN}"
+        check_output.return_value = yaml.safe_dump(expected).encode("UTF-8")
+        self.assertEqual(client._leader_get("foo"), expected)
+        check_output.assert_called_once_with(["leader-get", "--format=yaml", "foo"])
+
+    @patch("subprocess.check_output")
+    def test_leader_get_missing(self, check_output):
+        check_output.return_value = b""
+        self.assertIsNone(client._leader_get("foo"))
+        check_output.assert_called_once_with(["leader-get", "--format=yaml", "foo"])
+
+    @patch("subprocess.check_call")
+    def test_leader_set(self, check_call):
+        client._leader_set({"foo": "bar", "one": "two"})
+        check_call.assert_called_once_with(["leader-set", "foo=bar", "one=two"])
+
+    @patch("pgsql.client._leader_get")
+    def test_get_pgsql_leader_data(self, leader_get):
+        expected = {2: {"database": "testus"}}
+        leader_get.return_value = yaml.safe_dump(expected)
+        self.assertEqual(client._get_pgsql_leader_data(), expected)
+        leader_get.assert_called_once_with(client.LEADER_KEY)
+
+    @patch("pgsql.client._leader_get")
+    def test_get_pgsql_leader_data_missing(self, leader_get):
+        leader_get.return_value = None
+        self.assertEqual(client._get_pgsql_leader_data(), {})
+        leader_get.assert_called_once_with(client.LEADER_KEY)
+
+    @patch("pgsql.client._leader_set")
+    def test_set_pgsql_leader_data(self, leader_set):
+        data = {2: {"extensions": ["citext"], "database": "testus"}}
+        client._set_pgsql_leader_data(data)
+        encoded_data = yaml.safe_dump(data)
+        leader_set.assert_called_once_with({client.LEADER_KEY: encoded_data})
