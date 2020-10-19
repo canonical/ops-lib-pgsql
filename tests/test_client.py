@@ -91,6 +91,7 @@ class TestPGSQLBase(unittest.TestCase):
         self.ev = self.harness.charm.database_relation_joined_event
         self.relation = self.harness.model.relations["db"][0]
         self.log = self.harness.charm.db.log
+        self.local_app = self.harness.model.unit.app
         self.local_unit = self.harness.model.unit
         self.remote_app = self.ev.app
         self.remote_units = sorted((u for u in self.relation.units if u.app == self.remote_app), key=lambda x: x.name)
@@ -843,3 +844,78 @@ class TestPostgreSQLClient(TestPGSQLBase):
             "standby_gone",
             "database_gone",
         )
+
+
+class TestUpgradeCharm(TestPGSQLBase):
+    def test_leader_migrates_unit_reldata(self):
+        # On upgrade-charm, the leader needs to migrate its unit
+        # relation data to app relation data, which is now preferred.
+        # And mirror it to the shared peer data, where non-leaders
+        # can see it.
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(True)
+            self.harness.update_relation_data(
+                self.relation_id,
+                self.local_unit.name,
+                {"database": "mydb", "extensions": "citext,debversion", "roles": "myrole"},
+            )
+        self.charm.on.upgrade_charm.emit()
+        self.assertEqual(self.relation.data[self.local_app]["database"], "mydb")
+        self.assertEqual(self.relation.data[self.local_app]["extensions"], "citext,debversion")
+        self.assertEqual(self.relation.data[self.local_app]["roles"], "myrole")
+
+    def test_non_leader_waits_to_migrate_unit_reldata(self):
+        # On upgrade-charm, the leader needs to migrate its unit
+        # relation data to app relation data, which is now preferred.
+        # And mirror it to the shared peer data, where non-leaders
+        # can see it.
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(False)
+            self.harness.update_relation_data(
+                self.relation_id,
+                self.local_unit.name,
+                {"database": "mydb", "extensions": "citext,debversion", "roles": "myrole"},
+            )
+
+        self.charm.on.upgrade_charm.emit()
+
+        self.assertNotIn("database", self.relation.data[self.local_app])
+        self.assertNotIn("extensions", self.relation.data[self.local_app])
+        self.assertNotIn("roles", self.relation.data[self.local_app])
+
+        with self.harness.hooks_disabled():
+            self.harness.set_leader(True)
+            # Update the relation data again, to work around
+            # https://github.com/canonical/operator/issues/429
+            self.harness.update_relation_data(
+                self.relation_id,
+                self.local_unit.name,
+                {"database": "mydb", "extensions": "citext,debversion", "roles": "myrole"},
+            )
+
+        # After being promoted to leader, the deferred event will be
+        # reemitted and the upgrade_charm logic run. This is most
+        # likely in the leader-elected hook.
+        self.harness.framework.reemit()
+
+        self.assertEqual(self.relation.data[self.local_app]["database"], "mydb")
+        self.assertEqual(self.relation.data[self.local_app]["extensions"], "citext,debversion")
+        self.assertEqual(self.relation.data[self.local_app]["roles"], "myrole")
+
+    def test_non_leader_mirrors_leader_data(self):
+        # On upgrade-charm, non-leaders defer the event until they are
+        # leader or the leader has shared the relation settings. When
+        # the non-leader sees the shared relation settings, it mirrors
+        # them to its local unit relation data for backwards
+        # compatibility with older PostgreSQL charm deployments.
+        self.charm.on.upgrade_charm.emit()
+        self.assertNotIn("database", self.relation.data[self.local_unit])
+
+        client._set_pgsql_leader_data(
+            {self.relation_id: {"database": "mydb", "extensions": "citext,debversion", "roles": "myrole"}}
+        )
+        self.harness.framework.reemit()
+
+        self.assertEqual(self.relation.data[self.local_unit]["database"], "mydb")
+        self.assertEqual(self.relation.data[self.local_unit]["extensions"], "citext,debversion")
+        self.assertEqual(self.relation.data[self.local_unit]["roles"], "myrole")
