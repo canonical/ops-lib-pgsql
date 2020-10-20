@@ -886,13 +886,6 @@ class TestUpgradeCharm(TestPGSQLBase):
 
         with self.harness.hooks_disabled():
             self.harness.set_leader(True)
-            # Update the relation data again, to work around
-            # https://github.com/canonical/operator/issues/429
-            self.harness.update_relation_data(
-                self.relation_id,
-                self.local_unit.name,
-                {"database": "mydb", "extensions": "citext,debversion", "roles": "myrole"},
-            )
 
         # After being promoted to leader, the deferred event will be
         # reemitted and the upgrade_charm logic run. This is most
