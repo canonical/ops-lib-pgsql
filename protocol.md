@@ -136,7 +136,7 @@ may be missing if there are no standby databases, and the `master` key may be mi
 database is not yet available; clients should wait for it to become available in a future
 relation-changed hook.
 
-The non-lead client units know when the databae is ready in a similar manner to the lead unit,
+The non-lead client units know when the database is ready in a similar manner to the lead unit,
 except that they need to examine the shared peer data to determine what settings have been
 requested, providing them with the values they need to compare with the server's Application
 Relation Data.
