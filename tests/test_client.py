@@ -61,6 +61,7 @@ class Charm(ops.charm.CharmBase):
 class TestPGSQLBase(unittest.TestCase):
     def setUp(self):
         # TODO: Operator Framework should expose leadership, and be mocked there.
+        # See https://github.com/canonical/operator/issues/215
         self.leadership_data = {}
         leader_patch = unittest.mock.patch.multiple(
             client,
