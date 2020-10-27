@@ -26,3 +26,5 @@ lint:
 
 clean:
 	rm -rf .tox
+
+.PHONY: test coverage lint clean
