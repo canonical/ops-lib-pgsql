@@ -369,13 +369,25 @@ class PostgreSQLClient(ops.framework.Object):
             self.on.database_relation_joined.emit(**self._db_event_args(event))
             self._state.rels[event.relation.id] = dict(master=None, standbys=None)
 
-    def _on_changed(self, event: ops.charm.RelationEvent) -> None:
+    def _on_changed(self, event: ops.charm.RelationEvent) -> None:  # noqa: C901
         self.log.debug("_on_changed for relation %r", event.relation.id)
-        self._mirror_appdata()  # PostgreSQL charm backwards compatibility
-        kwargs = self._db_event_args(event)
 
         rel = event.relation
         relid = rel.id
+
+        # It has been observed, but not reproduced, situations where the
+        # relation-changed hook gets run before the relation-joined hook.
+        # Log this and defer. We don't want to continue, as we want
+        # _on_joined to be invoked and emit the join events.
+        if relid not in self._state.rels:
+            self.log.error(
+                f"{self.relation_name}-relation-changed hook run before {self.relation_name}-joined! Deferring event."
+            )
+            event.defer()
+            return
+
+        self._mirror_appdata()  # PostgreSQL charm backwards compatibility
+        kwargs = self._db_event_args(event)
 
         prev_master = self._state.rels.get(relid, {}).get("master", None)
         prev_standbys = self._state.rels.get(relid, {}).get("standbys", []) or []
