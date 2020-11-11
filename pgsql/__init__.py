@@ -25,4 +25,4 @@ from pgconnstr import ConnectionString  # noqa
 LIBNAME = "pgsql"
 LIBAUTHOR = "postgresql-charmers@lists.launchpad.net"
 LIBAPI = 1
-LIBPATCH = 2
+LIBPATCH = 3
