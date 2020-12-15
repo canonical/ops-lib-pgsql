@@ -31,6 +31,7 @@ requires:
 Your charm needs to bootstrap it and handle events:
 
 ```python
+import ops.lib
 pgsql = ops.lib.use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 
