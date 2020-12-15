@@ -640,7 +640,15 @@ def _is_ready(
     # database name.
     for k in ["database", "roles", "extensions"]:
         got, want = reldata.get(k) or "", appdata.get(k) or ""
-        if got != want:
+        if k == "database" and want == "":
+            # If we have requested the default database, don't bother
+            # matching the "database" field. The server may specify
+            # the actual actual database name being used rather than
+            # mirror back the empty string, which allows old clients
+            # that construct their own connection strings to continue
+            # functioning.
+            pass
+        elif got != want:
             log.debug("not ready because got %s==%r, requested %r", k, got, want)
             return False
 

@@ -129,12 +129,14 @@ granted access (both the client lead unit and non-lead units). And the server al
 libpq connection strings to use to connect to the master database in the `master` key, and a
 line separated list of standby database connection strings in the `standbys` key.
 
-The lead unit knows when the database is ready for use when the settings have been mirrored back
-identically, it finds all of its egress subnets in the `allowed-subnets` key, and any necessary
-`master` and `standbys` libpq database connection strings have been provided. The `standbys` key
-may be missing if there are no standby databases, and the `master` key may be missing if the master
-database is not yet available; clients should wait for it to become available in a future
-relation-changed hook.
+The lead unit knows when the database is ready for use when the settings have been mirrored back,
+it finds all of its egress subnets in the `allowed-subnets` key, and any necessary `master` and
+`standbys` libpq database connection strings have been provided. The `roles` and `extensions`
+settings are mirrored back identically. The `database` setting is mirrored back identically if
+set, or should be ignored if left as the default empty string (for legacy protocol reasons). The
+`standbys` key may be missing if there are no standby databases, and the `master` key may be
+missing if the master database is not yet available; clients should wait for it to become
+available in a future relation-changed hook.
 
 The non-lead client units know when the database is ready in a similar manner to the lead unit,
 except that they need to examine the shared peer data to determine what settings have been

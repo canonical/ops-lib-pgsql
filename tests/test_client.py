@@ -305,6 +305,24 @@ class TestPGSQLHelpers(TestPGSQLBase):
                 rel[k] = "value"
                 self.assertTrue(client._is_ready(self.log, app, loc, rel))
 
+    def test_is_ready_default_dbname(self):
+        # If no database name has been requested, the relation is ready
+        # no matter what the published database name is. Ideally
+        # the PostgreSQL charm mirrors back the client setting
+        # identically (like "roles" and "extensions"), but some legacy
+        # clients still use the "database" field to construct their own
+        # connection strings rather than using the connection strings
+        # provided on the relation.
+        app = {}
+        loc = {"egress-subnets": "127.0.0.0/24"}
+        rel = {"allowed-subnets": "127.0.0.0/24"}
+        app["database"] = ""  # Empty string is the default
+        app["roles"] = "value"
+        self.assertFalse(client._is_ready(self.log, app, loc, rel))
+        rel["roles"] = "value"
+        rel["database"] = "whatever"
+        self.assertTrue(client._is_ready(self.log, app, loc, rel))
+
 
 class TestPostgreSQLRelationEvent(TestPGSQLBase):
     @patch("pgsql.client._master")
@@ -525,14 +543,19 @@ class TestPostgreSQLClient(TestPGSQLBase):
         # that not only are the events we expect have been emitted,
         # but also importantly that events we *don't* expect have
         # *not* been emitted.
+        got = (
+            "{"
+            + ", ".join(set(str(n) for n in self.charm.db.on.events() if getattr(self.charm, f"{n}_event") is not None))
+            + "}"
+        )
         for n in self.charm.db.on.events():
             is_set = getattr(self.charm, f"{n}_event") is not None
             if n in event_names:
-                self.assertTrue(is_set, f"{n}_event should be set")
+                self.assertTrue(is_set, f"{n} event should be set, got {got}")
                 count = getattr(self.charm, f"{n}_count")
-                self.assertEqual(count, 1, f"{n}_event was emitted {count} times, expected 1")
+                self.assertEqual(count, 1, f"{n} event was emitted {count} times, expected 1")
             else:
-                self.assertFalse(is_set, f"{n}_event should not be set")
+                self.assertFalse(is_set, f"{n} event should not be set, got {got}")
 
     def test_master_available(self):
         # When the master becomes available,
@@ -779,8 +802,8 @@ class TestPostgreSQLClient(TestPGSQLBase):
             "database_changed",
         ]
 
-        # No longer providing the requested database, no longer ready.
-        self.harness.update_relation_data(self.relation_id, self.remote_app.name, {"database": "foo"})
+        # No longer providing the requested extensions, no longer ready.
+        self.harness.update_relation_data(self.relation_id, self.remote_app.name, {"extensions": "foo"})
 
         self.assert_only_events(*ev_names)
 
